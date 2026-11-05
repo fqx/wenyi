@@ -191,6 +191,63 @@ Use `wenyi models list`, `models explain --operation ID`, and
 `models check --for prepare|translate|review` for local checks.
 Only `models ping` sends live probes; see the [CLI reference](../guide/cli.md#model-commands).
 
+### Dedicated HY-MT translation models (local patch)
+
+Select `translation_protocol: hy_mt` explicitly on a model profile. This uses the
+[official structured translation prompt](https://huggingface.co/tencent/Hy-MT2-1.8B#hy-mt2-translation-task-instruction-examples-chinese-english-comparison)
+over the existing transport, independently of the model name:
+
+```yaml
+llm:
+  preset: deepseek
+  providers:
+    local:
+      kind: openai-compatible
+      base_url: http://127.0.0.1:8504/v1
+      api_key_env: OMLX_API_KEY
+  models:
+    hy_mt:
+      provider: local
+      model: Hy-MT2-1.8B-oQ4 # Use the exact ID exposed by your server.
+      translation_protocol: hy_mt
+      max_output_tokens: 4096
+      options:
+        thinking: false
+        request_overrides:
+          temperature: 0.7
+          top_p: 0.6
+          top_k: 20
+          repetition_penalty: 1.05
+  routes:
+    translation.body: {model: hy_mt}
+    translation.title: {model: hy_mt}
+```
+
+The default protocol remains `standard`. HY-MT supports only body/title
+translation in `pipeline.translation_mode: standard`; combining it with
+`three_draft_synthesis` is rejected. Fallback profiles on each route must use the same
+protocol. Keep general-purpose models for other operations.
+
+The model receives one user message with a flat JSON object (`p0`, `p1`, ...).
+Wenyi rejects duplicate/missing/extra keys, non-string values, empty translations
+(except intentional MinerU empty targets), Markdown wrappers and trailing prose,
+then restores source order. Body requests retain alignment retries and
+single-paragraph recovery. Titles retain their existing failure handling.
+Polishing uses a fresh request instead of continuing the HY-MT conversation.
+
+Glossary, style, language guidance, synopsis, recent translations, annotation
+references and the next source paragraph remain reference data outside the source
+JSON. These references extend the official minimal example: assess literary
+quality with your model and language pair. The sampling parameters above follow
+the 1.8B/7B model card and require server support. Source, references and output
+must fit the server context window; the patch does not truncate them automatically.
+
+`wenyi models list --json` and `models explain` expose the protocol. It participates
+in inference fingerprints; its prompt is frozen with translation language-policy
+resources. Completed translations remain saved and pending calls use the new
+route. Test a fresh short sample before translating a book; offline protocol
+regressions do not evaluate whole-book quality.
+
 ### Provider options
 
 | Kind | Default endpoint | Default credential |

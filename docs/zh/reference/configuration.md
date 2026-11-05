@@ -182,6 +182,55 @@ llm:
 
 <a id="provider-options"></a>
 
+### 专用 HY-MT 翻译模型（本地补丁）
+
+在模型 profile 上显式设置 `translation_protocol: hy_mt`，通过现有传输接口使用
+[官方结构化翻译提示词](https://huggingface.co/tencent/Hy-MT2-1.8B#hy-mt2-translation-task-instruction-examples-chinese-english-comparison)，不根据模型名称自动识别：
+
+```yaml
+llm:
+  preset: deepseek
+  providers:
+    local:
+      kind: openai-compatible
+      base_url: http://127.0.0.1:8504/v1
+      api_key_env: OMLX_API_KEY
+  models:
+    hy_mt:
+      provider: local
+      model: Hy-MT2-1.8B-oQ4 # Use the exact ID exposed by your server.
+      translation_protocol: hy_mt
+      max_output_tokens: 4096
+      options:
+        thinking: false
+        request_overrides:
+          temperature: 0.7
+          top_p: 0.6
+          top_k: 20
+          repetition_penalty: 1.05
+  routes:
+    translation.body: {model: hy_mt}
+    translation.title: {model: hy_mt}
+```
+
+默认协议仍为 `standard`。HY-MT 仅支持 `pipeline.translation_mode: standard`
+下的正文和标题翻译，与 `three_draft_synthesis` 组合会报配置错误。每条路由的备用模型必须使用
+相同协议。其他操作继续使用通用模型。
+
+模型收到单条 user 消息，其中是 `p0`、`p1` 等键组成的扁平 JSON 对象。Wenyi 拒绝重复、
+缺失或多余的键、非字符串、空译文（MinerU 有意保留的空译文除外）、Markdown 包裹和
+尾随说明，再按原文顺序还原结果。正文保留现有对齐重试与逐段回退；标题沿用现有失败
+处理。润色发起独立请求，不续接 HY-MT 翻译对话。
+
+术语、风格、语言规则、摘要、近期译文、注释参考和下一段原文作为源 JSON 之外的参考
+数据。这些参考扩展了官方最简示例，需按实际模型与语言对评估文学质量。上述采样参数
+来自 1.8B/7B 模型卡，服务端需支持对应字段。原文、参考和输出总量必须适配服务端上下文
+窗口；补丁不自动截断这些内容。
+
+`wenyi models list --json` 和 `models explain` 展示所选协议。协议进入推理指纹，提示词
+随翻译语言策略资源冻结。已完成译文继续保留，待处理调用采用新路由。全书翻译前先用
+新的短样本验证；离线协议回归不评估全书翻译质量。
+
 ### 提供商选项
 
 | 类型 | 默认端点 | 默认凭据 |

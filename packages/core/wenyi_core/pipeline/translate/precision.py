@@ -39,6 +39,7 @@ class PrecisionBatchExecutor:
         checkpoint: Callable[[], None] | None = None,
         progress: Callable[[str], None] | None = None,
     ) -> BatchResult:
+        self._config.validate_translation_protocol()
         if not self._config.pipeline.polish:
             raise PrecisionError("Best-of-three translation requires polishing")
         return _PrecisionRun(

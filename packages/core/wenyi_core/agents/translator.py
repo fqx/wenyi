@@ -12,6 +12,7 @@ from ..llm.retrying import TruncatedResponseError
 from ..models.glossary import GlossaryTerm
 from . import prompts
 from .base import Agent, Messages
+from .hy_mt import StructuredTranslationError, translate, uses_hy_mt
 
 
 class AlignmentError(Exception):
@@ -96,7 +97,7 @@ class Translator(Agent):
         next_source: str = "",
         *,
         allow_empty_translations: bool = False,
-    ) -> tuple[list[str], Messages]:
+    ) -> tuple[list[str], Messages | None]:
         """Translate one batch and validate output types, count and (by default) nonempty content.
 
         When ``allow_empty_translations`` is true (MinerU PDF path), blank strings are kept as
@@ -104,6 +105,42 @@ class Translator(Agent):
         Returns the translations and the three-turn transcript for optional polish continuation.
         """
         n = len(sources)
+        if uses_hy_mt(self.config, "translation.body"):
+            try:
+                items = translate(
+                    self,
+                    sources,
+                    operation="translation.body",
+                    references={
+                        "style": style,
+                        "book_synopsis": book_synopsis,
+                        "chapter_digest": chapter_digest,
+                        "recent_translations": context,
+                        "glossary": prompts.render_glossary(
+                            glossary_terms,
+                            source_lang=self.src,
+                            note_source="\n".join(sources)
+                            if self.config.pipeline.terminology_context
+                            else None,
+                        )
+                        if glossary_terms
+                        else "",
+                        "annotation_references": prompts.render_annotation_contexts(
+                            annotation_contexts or [[] for _ in sources]
+                        )
+                        if annotation_contexts and any(annotation_contexts)
+                        else "",
+                        "following_source": next_source,
+                        "language_guidance": dict(self.language_policy.prompt_values)[
+                            "configured_lang_guidance"
+                        ],
+                    },
+                    allow_empty=allow_empty_translations,
+                )
+            except (StructuredTranslationError, TruncatedResponseError) as error:
+                raise AlignmentError(str(error)) from error
+            # The official single-user protocol cannot continue as a polishing conversation.
+            return items, None
         system = self.render(
             "translator_system",
             src=self.src,

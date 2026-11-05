@@ -19,7 +19,11 @@ from wenyi_core.i18n.resources import read_json, read_text
 
 DATA = Path(__file__).resolve().parents[1] / "wenyi_core/i18n/data"
 BASELINE = Path(__file__).with_name("fixtures") / "literary_prompt_baseline.json"
-TASK_NAMES = tuple(sorted(path.stem for path in (DATA / "tasks").glob("*.txt")))
+# HY-MT is a local opt-in protocol added after this pinned pre-split snapshot.
+# Its genre composition and frozen resources are covered in test_hy_mt_translation.
+TASK_NAMES = tuple(
+    sorted(path.stem for path in (DATA / "tasks").glob("*.txt") if path.stem != "hy_mt_translation")
+)
 TASK_GROUPS = tuple(sorted({name.split("_")[0] for name in TASK_NAMES}))
 PLAN_CASES = {
     "standard": ("ja", "zh", "standard", False),

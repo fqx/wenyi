@@ -1,6 +1,7 @@
 """Allowlisted packaged prompt templates."""
 
 TASKS = (
+    "hy_mt_translation",
     "analyzer_system",
     "analyzer_user",
     "book_synopsis_system",

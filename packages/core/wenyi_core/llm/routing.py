@@ -41,6 +41,7 @@ class ResolvedRoute:
     model_identity: str
     fingerprint: str
     fallbacks: tuple[str, ...] = ()
+    translation_protocol: str = "standard"
 
     def request_model(self) -> ResolvedModel:
         options = (
@@ -87,6 +88,9 @@ def model_route(
         "max_output_tokens": limit,
         "connection_options": connection_options.model_dump(mode="json"),
     }
+    # Preserve existing identities for the unchanged standard request protocol.
+    if model.translation_protocol != "standard":
+        physical_model["translation_protocol"] = model.translation_protocol
     return ResolvedRoute(
         operation,
         origin,
@@ -104,6 +108,7 @@ def model_route(
             {"operation": operation, "protocol": spec.protocol_version, "inference": physical_model}
         ),
         fallbacks,
+        model.translation_protocol,
     )
 
 
@@ -137,6 +142,17 @@ def resolve_routes(config: LLMConfig) -> Mapping[str, ResolvedRoute]:
         result = model_route(
             config, operation, profile, origin=origin, tier=tier, fallbacks=fallbacks
         )
+        protocols = {
+            config.models[profile].translation_protocol
+            for profile in (result.profile, *result.fallbacks)
+        }
+        if len(protocols) != 1:
+            raise ValueError(f"{operation}: fallback models must use the same translation_protocol")
+        if result.translation_protocol == "hy_mt" and operation not in {
+            "translation.body",
+            "translation.title",
+        }:
+            raise ValueError(f"{operation}: hy_mt supports only body and title translation")
         resolved[operation] = result
         return result
 

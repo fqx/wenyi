@@ -33,6 +33,7 @@ llm:
   preset: deepseek # All tiers: deepseek-flash, thinking enabled, reasoning_effort high
   # Add providers, models and routes to override individual operations.
   # Inspect effective settings with: wenyi models list
+  # Dedicated translation profiles may set translation_protocol: hy_mt (standard mode only).
 
 # ── Segmentation ─────────────────────────────────────────────────────────────────
 segment:
@@ -225,6 +226,7 @@ class Config(BaseModel):
 
     @model_validator(mode="after")
     def validate_builtin_language_policy(self) -> Config:
+        self.validate_translation_protocol()
         resolve_policy(
             PolicyContext(
                 self.source_lang,
@@ -247,6 +249,20 @@ class Config(BaseModel):
     def set_experimental_prompt_genre(self, genre: str) -> None:
         """Keep the original experimental API as an alias for existing callers."""
         self.set_prompt_genre(genre)
+
+    def validate_translation_protocol(self) -> None:
+        """Reject unsupported precision requests, including invocation-time mode overrides."""
+        if self.pipeline.translation_mode == "three_draft_synthesis":
+            from .llm.routing import resolve_routes
+
+            routes = resolve_routes(self.llm)
+            if any(
+                routes[operation].translation_protocol == "hy_mt"
+                for operation in ("translation.body", "translation.title")
+            ):
+                raise ValueError(
+                    "hy_mt translation_protocol does not support three_draft_synthesis"
+                )
 
     def language_policy(
         self,
@@ -298,10 +314,22 @@ class Config(BaseModel):
                     "glossary_extractor",
                     "glossary_history",
                 ) + terminology
+            from .llm.routing import resolve_routes
+
+            routes = resolve_routes(self.llm)
+            structured = (
+                ("hy_mt",)
+                if any(
+                    routes[operation].translation_protocol == "hy_mt"
+                    for operation in ("translation.body", "translation.title")
+                )
+                else ()
+            )
             return (
                 ("translator", "title_translator", "glossary_extractor", "glossary_history")
                 + (("polisher",) if self.pipeline.polish else ())
                 + terminology
+                + structured
             )
         if phase == "review":
             groups = ["reviewer"]

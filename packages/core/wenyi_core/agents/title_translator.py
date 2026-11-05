@@ -1,8 +1,10 @@
 """Translate aligned title batches without accessing book state."""
 
 from ..errors import WenyiError
+from ..llm.retrying import TruncatedResponseError
 from . import prompts
 from .base import Agent
+from .hy_mt import StructuredTranslationError, translate, uses_hy_mt
 
 
 class TitleOutputError(WenyiError, RuntimeError):
@@ -22,6 +24,21 @@ class TitleTranslator(Agent):
 
     def translate(self, titles: list[str], glossary_text: str) -> list[str]:
         """Return stripped titles; empty-string fallback belongs to the title plan."""
+        if uses_hy_mt(self.config, "translation.title"):
+            if not titles:
+                return []
+            try:
+                return [
+                    item.strip()
+                    for item in translate(
+                        self,
+                        titles,
+                        operation="translation.title",
+                        references={"glossary": glossary_text},
+                    )
+                ]
+            except (StructuredTranslationError, TruncatedResponseError) as error:
+                raise TitleOutputError(len(titles), None) from error
         system = self.render("title_translator_system", src=self.src, tgt=self.tgt, n=len(titles))
         user = self.render(
             "title_translator_user",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -72,6 +72,7 @@ class ModelConfig(BaseModel):
     provider: str = Field(min_length=1)
     model: str = Field(min_length=1)
     max_output_tokens: int | None = Field(default=None, gt=0)
+    translation_protocol: Literal["standard", "hy_mt"] = "standard"
     options: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("model", "provider")

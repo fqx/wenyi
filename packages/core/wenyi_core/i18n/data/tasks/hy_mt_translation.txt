@@ -1,0 +1,10 @@
+$reference_section### Task
+Translate the user-facing text within the following JSON data into $tgt_label.
+
+### Strict Rules
+1. Structure Preservation: You MUST preserve the original JSON data structure, nesting, hierarchy, and indentation exactly as they are.
+2. Selective Translation: Translate ONLY the visible, user-facing text content/values.
+3. Strict Non-Translation: NEVER translate or alter code tags, keys, properties, object names, or variable placeholders. Leave them exactly in their original English/code form.
+
+### Source Data
+$source_data

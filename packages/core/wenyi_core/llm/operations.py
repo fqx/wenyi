@@ -204,6 +204,8 @@ def workflow_operations(workflow: str, flags: Mapping[str, object]) -> tuple[str
 
 def configured_operations(config: Config, workflow: str) -> tuple[str, ...]:
     """Map product settings to registry flags without constructing a model client."""
+    if workflow == "translate":
+        config.validate_translation_protocol()
     flags = config.pipeline.model_dump()
     flags["language_auto"] = config.source_lang == "auto"
     return workflow_operations(workflow, flags)

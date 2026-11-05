@@ -26,6 +26,21 @@ def _invoke(tmp_path, raw, *arguments):
     return CliRunner().invoke(app, ["--config", str(config), "models", *arguments])
 
 
+def test_hy_mt_protocol_is_visible_in_offline_preview(tmp_path):
+    raw = {
+        "llm": {
+            "preset": "fake",
+            "models": {
+                "hy": {"provider": "default", "model": "hy-mt", "translation_protocol": "hy_mt"}
+            },
+            "routes": {"translation.body": {"model": "hy"}},
+        }
+    }
+    result = _invoke(tmp_path, raw, "explain", "--operation", "translation.body")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["translation_protocol"] == "hy_mt"
+
+
 def test_preview_needs_no_keys_or_sdk(tmp_path, monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.setattr("openai.OpenAI", lambda **kw: pytest.fail("preview constructed SDK"))
