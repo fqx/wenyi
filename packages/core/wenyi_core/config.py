@@ -46,7 +46,7 @@ segment:
 pipeline:
   # Body translation and Reviewer requests always use the full glossary.
   review: true # Run final review after whole-book translation; disable with --no-review
-  # Additional structural retries for translation, fresh polishing and each precision stage; 0 disables retries.
+  # Additional retries for translation, polishing, glossary verification/history and precision stages; 0 disables retries.
   align_retry_limit: 2
   polish: true # Polish the full translation with the strong tier; enabled by default and adds substantial cost
   translation_mode: standard # standard | three_draft_synthesis; three_draft_synthesis requires polish
@@ -112,7 +112,7 @@ class PipelineConfig(BaseModel):
         return self
 
     review: bool = True
-    # Additional structural retries for standard translation and precision generation/synthesis.
+    # Additional retries for translation, polishing, glossary verification/history and precision.
     align_retry_limit: int = 2
     polish: bool = (
         True  # Polish the full translation with the strong tier by default; disable to save cost

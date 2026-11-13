@@ -7,9 +7,11 @@ import pytest
 from wenyi_core.agents.glossary_extractor import GlossaryExtractor, TranslatedSegmentEvidence
 from wenyi_core.config import Config
 from wenyi_core.llm.providers.fake import FakeClient
+from wenyi_core.llm.retrying import TruncatedResponseError
 from wenyi_core.models.glossary import GlossaryTerm
 from wenyi_core.pipeline.translate.terminology import TerminologyService
 
+from tests.fake_llm import METERED_TOTAL_TOKENS, MeteredFakeClient
 from tests.terminology_fixtures import EvidenceAgent, book_store
 
 REQUESTS = "glossary/history/requests/"
@@ -180,6 +182,71 @@ def test_failed_requests_are_not_negative_cache_entries(tmp_path, failure):
     assert (aligned, deferred) == (1, 1)
     assert result[0].target == "历史译法"
     assert len(client.calls) == 1
+
+
+@pytest.mark.parametrize("truncated_attempts", [1, 2])
+def test_truncated_history_alignment_retries_then_caches_success(
+    tmp_path, caplog, truncated_attempts
+):
+    store, _ = book_store(tmp_path)
+    terms, occurrences = candidates()
+
+    def respond(messages, tier, json_mode):
+        if len(client.calls) <= truncated_attempts:
+            raise TruncatedResponseError("PRIVATE truncated provider response")
+        return json.dumps({"terms": [{"source": terms[0].source, "target": "历史译法"}]})
+
+    client = MeteredFakeClient(handler=respond)
+    first = GlossaryExtractor(client, Config(source_lang="en", target_lang="zh"))
+    result, aligned, deferred = first._align_with_first_occurrences(terms, occurrences, store=store)
+    assert (aligned, deferred) == (1, 1)
+    assert result[0].target == "历史译法"
+    assert len(client.calls) == truncated_attempts + 1
+    assert all(call == client.calls[0] for call in client.calls)
+    usage = client.usage_summary()["by_stage"]["glossary.align_history"]
+    assert usage["calls"] == truncated_attempts + 1
+    assert usage["total_tokens"] == METERED_TOTAL_TOKENS * (truncated_attempts + 1)
+    events = store.list_events(event_type="glossary_history_alignment_retry")
+    assert [event["next_attempt"] for event in events] == list(range(2, truncated_attempts + 2))
+    assert "PRIVATE" not in json.dumps(events)
+    assert "PRIVATE" not in caplog.text
+    assert len(store.list_artifacts(REQUESTS)) == 1
+
+    resumed, resumed_client = extractor([])
+    assert resumed._align_with_first_occurrences(terms, occurrences, store=store) == (
+        result,
+        aligned,
+        deferred,
+    )
+    assert resumed_client.calls == []
+    assert store.list_events(event_type="glossary_history_alignment_retry") == events
+
+
+@pytest.mark.parametrize("retry_limit", [0, 2])
+def test_truncated_history_alignment_exhaustion_does_not_cache(tmp_path, retry_limit):
+    store, _ = book_store(tmp_path)
+    terms, occurrences = candidates()
+    error = TruncatedResponseError("Injected truncated response")
+
+    def truncate(messages, tier, json_mode):
+        raise error
+
+    client = FakeClient(handler=truncate)
+    config = Config(source_lang="en", target_lang="zh")
+    config.pipeline.align_retry_limit = retry_limit
+    first = GlossaryExtractor(client, config)
+    with pytest.raises(TruncatedResponseError) as caught:
+        first._align_with_first_occurrences(terms, occurrences, store=store)
+    assert caught.value is error
+    assert len(client.calls) == retry_limit + 1
+    assert len(store.list_events(event_type="glossary_history_alignment_retry")) == retry_limit
+    assert store.list_artifacts(REQUESTS) == []
+    assert store.list_artifacts(DIAGNOSTICS) == []
+
+    resumed, resumed_client = extractor([{"source": terms[0].source, "target": "历史译法"}])
+    _, aligned, deferred = resumed._align_with_first_occurrences(terms, occurrences, store=store)
+    assert (aligned, deferred) == (1, 1)
+    assert len(resumed_client.calls) == 1
 
 
 @pytest.mark.parametrize(

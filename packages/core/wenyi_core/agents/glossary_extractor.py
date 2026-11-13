@@ -23,6 +23,7 @@ from ..glossary.store import (
 from ..i18n.policy.models import content_hash
 from ..llm.base import LLMClient
 from ..llm.json_parser import JsonParseError, parse_json_result
+from ..llm.retrying import TruncatedResponseError
 from ..storage.protocol import Storage
 from . import prompts
 from .base import Agent
@@ -337,11 +338,30 @@ class GlossaryExtractor(Agent):
                 ):
                     raise ValueError("Invalid glossary history alignment cache")
                 return dict(cached_mappings)
-        text = self.client.complete(
-            [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            operation="glossary.align_history",
-            json_mode=True,
-        )
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        max_attempts = self.config.pipeline.align_retry_limit + 1
+        for attempt in range(1, max_attempts + 1):
+            try:
+                text = self.client.complete(
+                    messages, operation="glossary.align_history", json_mode=True
+                )
+                break
+            except TruncatedResponseError:
+                if attempt == max_attempts:
+                    raise
+                if store is not None:
+                    store.log_event(
+                        "glossary_history_alignment_retry",
+                        reason="truncated_response",
+                        failed_attempt=attempt,
+                        next_attempt=attempt + 1,
+                        max_attempts=max_attempts,
+                    )
+                _LOGGER.warning(
+                    "Glossary history alignment truncated; retrying attempt %d/%d",
+                    attempt + 1,
+                    max_attempts,
+                )
         try:
             parsed = parse_json_result(text)
         except JsonParseError:

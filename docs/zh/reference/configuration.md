@@ -431,7 +431,7 @@ CLI 只覆盖其参数明确支持的设置；Web/Desktop 项目限制见[作用
 |---|---|---|
 | `pipeline.translation_mode` | `standard` | `standard` 或 `three_draft_synthesis`，后者要求 `polish: true`。 |
 | `pipeline.polish` | `true` | 润色已译批次，增加较多模型工作。 |
-| `pipeline.align_retry_limit` | `2` | 翻译、独立润色和术语审核的额外结构重试次数；`0` 关闭。 |
+| `pipeline.align_retry_limit` | `2` | 翻译、独立润色和术语审核的额外结构重试次数，以及历史术语对齐响应截断后的额外重试次数；`0` 关闭。 |
 | `pipeline.glossary_verification` | `false` | 新增或变更候选通过审核后入库。 |
 | `pipeline.glossary_fixed_terms` | `{}` | 模型不能覆盖的显式原文到译文映射。 |
 | `pipeline.rolling_context_tokens` | `512` | 前文译文预算，整数 ≥ 0，按 `cl100k_base` 计数。 |

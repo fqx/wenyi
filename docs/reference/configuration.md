@@ -467,7 +467,7 @@ described under [scope](#scope).
 |---|---|---|
 | `pipeline.translation_mode` | `standard` | `standard` or `three_draft_synthesis`; the latter requires `polish: true`. |
 | `pipeline.polish` | `true` | Polish translated batches; adds substantial model work. |
-| `pipeline.align_retry_limit` | `2` | Additional structural attempts for translation, fresh polishing and glossary verification; `0` disables them. |
+| `pipeline.align_retry_limit` | `2` | Additional structural attempts for translation, fresh polishing and glossary verification, plus retries for truncated glossary history alignment responses; `0` disables them. |
 | `pipeline.glossary_verification` | `false` | Review new or changed candidates before glossary admission. |
 | `pipeline.glossary_fixed_terms` | `{}` | Explicit source-to-target mappings which models cannot override. |
 | `pipeline.rolling_context_tokens` | `512` | Preceding translation budget, integer ≥ 0, counted with `cl100k_base`. |
