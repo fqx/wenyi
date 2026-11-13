@@ -305,7 +305,6 @@ class PreparationService:
         self._runtime.apply_manifest_languages(manifest)
         if phase == "translation":
             self._runtime.extractor.seed_fixed_terms(store)
-        if phase == "translation":
             self._runtime.require_terminology_context_access()
         if phase == "translation" and translation_revision(store, self._runtime.config):
             self._rebuild_analysis(store, manifest)

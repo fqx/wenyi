@@ -180,8 +180,6 @@ llm:
 `models check --for prepare|translate|review` 本地检查。
 只有 `models ping` 发起真实探测，详见 [CLI 命令](../guide/cli.md#model-commands)。
 
-<a id="provider-options"></a>
-
 ### 专用 HY-MT 翻译模型（本地补丁）
 
 在模型 profile 上显式设置 `translation_protocol: hy_mt`，通过现有传输接口使用
@@ -258,6 +256,8 @@ pipeline:
 JSON Schema 接受、修正或拒绝每个候选；无效审核会停止入库。决策按候选先保存检查点，再写
 术语，部分入库后中断也能复用剩余候选的已完成审核；用户后来修改映射会使旧决策失效。`glossary_fixed_terms` 默认 `{}`，显式指定
 的用户映射会预置到术语库，优先于模型提议，不再调用模型审核。
+
+<a id="provider-options"></a>
 
 ### 提供商选项
 

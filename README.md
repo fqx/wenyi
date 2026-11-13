@@ -26,6 +26,16 @@ Whole-book understanding · Consistent terminology · Evidence-based review
 
 </div>
 
+## Changes in this fork
+
+This fork adds an optional workflow for dedicated translation models:
+
+- **HY-MT2 support** — opt in to the official structured translation prompt, with stable paragraph keys, strict alignment checks, and single-paragraph recovery.
+- **Source-aware polishing** — provide the original text and a complete JSON Schema, validate paragraph types and counts, and retry invalid output before publishing a batch.
+- **Glossary admission review** — use a lightweight model such as Gemma to extract candidates, then send new or changed mappings to a stronger model through `glossary.verify` before storage. User-fixed terms take precedence, and checkpointed decisions support interrupted runs.
+
+Structural checks preserve paragraph identity; translation fidelity still depends on the models. See the [configuration guide](docs/reference/configuration.md#dedicated-hy-mt-translation-models-local-patch) for setup.
+
 ---
 
 ## Why Wenyi

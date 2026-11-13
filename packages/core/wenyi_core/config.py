@@ -52,8 +52,6 @@ pipeline:
   translation_mode: standard # standard | three_draft_synthesis; three_draft_synthesis requires polish
   rolling_context_tokens: 512 # Recent translation budget in tokens (tiktoken cl100k_base)
   terminology_context: false # CLI-only experimental whole-book terminology evidence
-  glossary_verification: false # Verify new or changed mappings with the strong tier before admission
-  glossary_fixed_terms: {} # User-approved source-to-target mappings; models cannot override these
   book_understanding: true # Prescan complete chapters for digests and a whole-book synopsis; disable to save prescan cost
   prescan_concurrency: 4 # Concurrent chapter-digest workers; chapters are independent, 1 runs serially
   annotation_alignment: true # Align translated annotations; EPUB uses fallback markers, PDF omits failed items
