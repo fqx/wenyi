@@ -58,11 +58,13 @@ class FakeClient(LLMClient):
         operation: str,
         json_mode: bool = False,
         max_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
         from ..operations import require_operation
         from ..routing import model_route
 
         require_operation(operation)
+        json_mode = json_mode or response_schema is not None
         route = self.routes[operation]
         if max_tokens is not None:
             route = model_route(
@@ -81,6 +83,7 @@ class FakeClient(LLMClient):
                 "stage": operation,
                 "tier": tier,
                 "json_mode": json_mode,
+                "response_schema": response_schema,
                 "max_tokens": route.max_output_tokens,
                 "model": route.model,
                 "provider": route.provider,

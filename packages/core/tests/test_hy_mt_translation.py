@@ -80,6 +80,50 @@ def test_batch_failure_uses_existing_single_paragraph_recovery():
     assert len(client.calls) == 3
 
 
+def test_changed_single_paragraph_key_uses_plain_translation_as_final_recovery():
+    cfg = hy_config()
+    responses = iter(['{"wrong":"invalid"}', '{"p2":"wrong key"}', "正确的译文。"])
+    client = FakeClient(handler=lambda *_: next(responses), config=cfg.llm)
+    assert Translator(client, cfg).translate_batch(["A translated paragraph."]) == ["正确的译文。"]
+    assert len(client.calls) == 3
+    assert "### Source Data" not in client.calls[-1]["messages"][0]["content"]
+
+
+def test_invalid_polishing_stops_batch_publication_instead_of_silently_keeping_draft():
+    from wenyi_core.agents.polisher import PolishOutputError
+
+    cfg = hy_config()
+
+    def respond(messages, tier, json_mode):
+        return "[0]" if json_mode else '{"p0":"初译"}'
+
+    client = FakeClient(handler=respond, config=cfg.llm)
+    plan = BatchPlan(
+        chapter=0,
+        start_index=0,
+        segment_indices=(0,),
+        sources=("Source.",),
+        terms=(),
+        context="",
+        style="",
+        book_synopsis="",
+        chapter_digest="",
+        annotation_contexts=[[]],
+        next_source="",
+    )
+    with pytest.raises(PolishOutputError):
+        TranslationBatchExecutor(Translator(client, cfg), Polisher(client, cfg)).execute(
+            plan, polish=True
+        )
+
+
+def test_fresh_polishing_receives_original_source_without_terminology_experiment():
+    cfg = hy_config()
+    client = FakeClient(handler=lambda *_: '{"polished":["修改后的译文"]}', config=cfg.llm)
+    Polisher(client, cfg).polish(["有误的初译"], sources=["The original source meaning."])
+    assert "The original source meaning." in client.calls[0]["messages"][-1]["content"]
+
+
 def test_titles_use_the_same_structured_protocol():
     cfg = hy_config()
     client = FakeClient(handler=lambda *_: '{"p1":"雨中","p0":"蓝门"}', config=cfg.llm)

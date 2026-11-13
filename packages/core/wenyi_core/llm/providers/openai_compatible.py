@@ -84,6 +84,7 @@ def build_request_kwargs(
 
 
 class OpenAICompatibleClient(OpenAICompatibleBaseClient[OpenAICompatibleOptions]):
+    supports_response_schema = True
     connection_options = CompatibleConnectionOptions
     protocol_version = 2
 
@@ -103,6 +104,18 @@ class OpenAICompatibleClient(OpenAICompatibleBaseClient[OpenAICompatibleOptions]
     ) -> str:
         if not json_mode:
             return super().generate(messages, model, json_mode=False, context=context)
+        if context.response_schema is not None:
+
+            def structured_request() -> str:
+                with context.attempt_scope():
+                    context.emit(
+                        "llm_json_mode_selected",
+                        json_output_mode="json_schema",
+                        json_mode_source="explicit_schema",
+                    )
+                    return self._request(messages, model, json_mode=True, context=context)
+
+            return self._generate_with_retry(structured_request, context=context)
 
         key = (model.model, json.dumps(model.options.model_dump(mode="json"), sort_keys=True))
         with self._json_modes_lock:

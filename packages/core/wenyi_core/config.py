@@ -46,12 +46,14 @@ segment:
 pipeline:
   # Body translation and Reviewer requests always use the full glossary.
   review: true # Run final review after whole-book translation; disable with --no-review
-  # Additional structural retries for standard translation and each precision stage; 0 disables retries.
+  # Additional structural retries for translation, fresh polishing and each precision stage; 0 disables retries.
   align_retry_limit: 2
   polish: true # Polish the full translation with the strong tier; enabled by default and adds substantial cost
   translation_mode: standard # standard | three_draft_synthesis; three_draft_synthesis requires polish
   rolling_context_tokens: 512 # Recent translation budget in tokens (tiktoken cl100k_base)
   terminology_context: false # CLI-only experimental whole-book terminology evidence
+  glossary_verification: false # Verify new or changed mappings with the strong tier before admission
+  glossary_fixed_terms: {} # User-approved source-to-target mappings; models cannot override these
   book_understanding: true # Prescan complete chapters for digests and a whole-book synopsis; disable to save prescan cost
   prescan_concurrency: 4 # Concurrent chapter-digest workers; chapters are independent, 1 runs serially
   annotation_alignment: true # Align translated annotations; EPUB uses fallback markers, PDF omits failed items
@@ -120,6 +122,22 @@ class PipelineConfig(BaseModel):
     rolling_context_tokens: int = Field(default=512, ge=0)
     # Experimental evidence production requires the CLI prepare/translate entrypoint.
     terminology_context: bool = False
+    glossary_verification: bool = False
+    glossary_fixed_terms: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("glossary_fixed_terms")
+    @classmethod
+    def validate_fixed_terms(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(
+            not source.strip()
+            or not target.strip()
+            or source != source.strip()
+            or target != target.strip()
+            for source, target in value.items()
+        ):
+            raise ValueError("Fixed glossary sources and targets must be nonempty trimmed strings")
+        return value
+
     # Prescan for a synopsis and chapter digests; disable to save prescan cost.
     book_understanding: bool = True
     prescan_concurrency: int = (
@@ -300,6 +318,7 @@ class Config(BaseModel):
             if self.pipeline.terminology_context
             else ()
         )
+        verification = ("glossary_verifier",) if self.pipeline.glossary_verification else ()
         if phase == "analysis":
             return (
                 ("analyzer", "chapter_digest", "book_synopsis")
@@ -309,11 +328,15 @@ class Config(BaseModel):
         if phase == "translation":
             if self.pipeline.translation_mode == "three_draft_synthesis":
                 return (
-                    "precision",
-                    "title_translator",
-                    "glossary_extractor",
-                    "glossary_history",
-                ) + terminology
+                    (
+                        "precision",
+                        "title_translator",
+                        "glossary_extractor",
+                        "glossary_history",
+                    )
+                    + terminology
+                    + verification
+                )
             from .llm.routing import resolve_routes
 
             routes = resolve_routes(self.llm)
@@ -330,6 +353,7 @@ class Config(BaseModel):
                 + (("polisher",) if self.pipeline.polish else ())
                 + terminology
                 + structured
+                + verification
             )
         if phase == "review":
             groups = ["reviewer"]

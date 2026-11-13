@@ -41,6 +41,7 @@ class RequestContext:
     attempt_scope: Callable[..., Any]
     sleep: Callable[[float], None] | None = None
     redact_diagnostic: Callable[[str], str] | None = None
+    response_schema: dict[str, Any] | None = None
 
 
 class ProviderAdapter(ABC):

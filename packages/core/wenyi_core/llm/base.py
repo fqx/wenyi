@@ -131,8 +131,9 @@ class LLMClient(ABC):
         operation: str,
         json_mode: bool = False,
         max_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
-        """Return model text using the registered operation route."""
+        """Return model text using the registered route; an explicit schema implies JSON mode."""
         raise NotImplementedError
 
     def complete_json(
@@ -141,7 +142,11 @@ class LLMClient(ABC):
         *,
         operation: str,
         max_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> Any:
         """Request and parse JSON output."""
-        text = self.complete(messages, operation=operation, json_mode=True, max_tokens=max_tokens)
+        options = {"response_schema": response_schema} if response_schema is not None else {}
+        text = self.complete(
+            messages, operation=operation, json_mode=True, max_tokens=max_tokens, **options
+        )
         return parse_json_loose(text)

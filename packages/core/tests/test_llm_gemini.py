@@ -338,3 +338,25 @@ def test_factory_build_client_gemini():
     assert isinstance(client.adapter("default"), GeminiClient)
     with pytest.raises(ValueError, match="Unknown provider"):
         Config.from_dict({"llm": {"preset": "google"}})
+
+
+def test_gemini_explicit_response_schema_reaches_native_sdk():
+    cfg = model_config(kind="gemini", profiles={"strong": {"model": "gemini-3.6-flash"}})
+    schema = {
+        "type": "object",
+        "properties": {"polished": {"type": "array", "items": {"type": "string"}}},
+    }
+    sdk = MagicMock()
+    sdk.models.generate_content.return_value = SimpleNamespace(
+        text='{"polished":["A paragraph."]}',
+        candidates=[SimpleNamespace(finish_reason="STOP")],
+        usage_metadata=None,
+    )
+    client = RoutedLLMClient(cfg)
+    client.adapter("default")._client = sdk
+    assert client.complete_json([], operation="polish.body", response_schema=schema) == {
+        "polished": ["A paragraph."]
+    }
+    request_config = sdk.models.generate_content.call_args.kwargs["config"]
+    assert request_config["response_mime_type"] == "application/json"
+    assert request_config["response_json_schema"] == schema

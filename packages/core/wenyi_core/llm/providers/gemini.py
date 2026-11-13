@@ -221,6 +221,8 @@ class GeminiClient(ProviderAdapter):
 
         if json_mode:
             config_kwargs["response_mime_type"] = "application/json"
+            if context.response_schema is not None:
+                config_kwargs["response_json_schema"] = context.response_schema
 
         # Apply the output-token limit.
         effective_max_tokens = context.max_tokens

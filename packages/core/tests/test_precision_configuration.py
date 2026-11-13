@@ -64,7 +64,7 @@ def test_precision_reuses_standard_translation_and_polish_routes_without_output_
     routes = resolve_routes(precision.llm)
     for operation in body_operations:
         assert OPERATIONS[operation].tier == "strong"
-        assert OPERATIONS[operation].protocol_version == 2
+        assert OPERATIONS[operation].protocol_version == (3 if operation == "polish.body" else 2)
         assert routes[operation].max_output_tokens is None
         assert routes[operation].tier == "strong"
 

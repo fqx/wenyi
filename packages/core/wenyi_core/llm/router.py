@@ -129,10 +129,17 @@ class RoutedLLMClient(LLMClient):
         operation: str,
         json_mode: bool = False,
         max_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
         require_operation(operation)
         primary = self.routes[operation]
-        return self._complete(messages, primary, json_mode=json_mode, max_tokens=max_tokens)
+        return self._complete(
+            messages,
+            primary,
+            json_mode=json_mode or response_schema is not None,
+            max_tokens=max_tokens,
+            response_schema=response_schema,
+        )
 
     def _complete(
         self,
@@ -141,8 +148,12 @@ class RoutedLLMClient(LLMClient):
         *,
         json_mode: bool,
         max_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
         operation = primary.operation
+        request_bytes = len(json.dumps(messages, ensure_ascii=False).encode("utf-8"))
+        if response_schema is not None:
+            request_bytes += len(json.dumps(response_schema, ensure_ascii=False).encode("utf-8"))
         if max_tokens is not None:
             primary = model_route(
                 self.config,
@@ -219,11 +230,7 @@ class RoutedLLMClient(LLMClient):
             def attempt_scope():
                 nonlocal active_reservation, attempt_number
                 self._validate_token_reservation(route)
-                estimate = (
-                    len(json.dumps(messages, ensure_ascii=False).encode("utf-8"))
-                    + 256
-                    + (route.max_output_tokens or 0)
-                )
+                estimate = request_bytes + 256 + (route.max_output_tokens or 0)
                 with self.limits.attempt(route.provider, estimate, emit) as reservation:
                     active_reservation = reservation
                     attempt_number += 1
@@ -242,6 +249,7 @@ class RoutedLLMClient(LLMClient):
                 attempt_scope,
                 self.limits.wait_for_retry,
                 self._redact,
+                response_schema,
             )
             safe_error = None
             try:

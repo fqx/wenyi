@@ -2,6 +2,7 @@
 
 TASKS = (
     "hy_mt_translation",
+    "hy_mt_single_translation",
     "analyzer_system",
     "analyzer_user",
     "book_synopsis_system",
@@ -12,6 +13,7 @@ TASKS = (
     "glossary_extractor_user",
     "glossary_history_system",
     "glossary_history_user",
+    "glossary_verifier_system",
     "language_detector_system",
     "polisher_continue_user",
     "polisher_system",

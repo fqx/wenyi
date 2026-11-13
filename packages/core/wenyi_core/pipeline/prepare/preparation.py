@@ -221,6 +221,7 @@ class PreparationService:
             source_hash=source_hash,
         )
         manifest["language_policies"] = initialize_policies(store, self._runtime.config)
+        self._runtime.extractor.seed_fixed_terms(store)
         digests = None
         if self._runtime.config.pipeline.book_understanding:
             digests = self._understanding.ensure_chapter_digests(store, doc.chapters, progress)
@@ -302,6 +303,8 @@ class PreparationService:
         store.recover_usage()
         manifest = store.load_manifest()
         self._runtime.apply_manifest_languages(manifest)
+        if phase == "translation":
+            self._runtime.extractor.seed_fixed_terms(store)
         if phase == "translation":
             self._runtime.require_terminology_context_access()
         if phase == "translation" and translation_revision(store, self._runtime.config):

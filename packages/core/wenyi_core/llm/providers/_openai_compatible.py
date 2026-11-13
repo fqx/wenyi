@@ -120,6 +120,8 @@ def normalize_openai_usage(usage: Any, *, separate_cache_writes: bool = True) ->
 class OpenAICompatibleBaseClient(ProviderAdapter, Generic[OptionsT]):
     """Reuse one SDK connection; route selection and usage belong to the caller."""
 
+    supports_response_schema = False
+
     def _ensure_client(self) -> Any:
         with self._client_lock:
             if self._client is None:
@@ -184,6 +186,15 @@ class OpenAICompatibleBaseClient(ProviderAdapter, Generic[OptionsT]):
         )
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if json_mode and context.response_schema is not None and self.supports_response_schema:
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "response",
+                    "strict": True,
+                    "schema": context.response_schema,
+                },
+            }
         response = self._ensure_client().chat.completions.create(**kwargs)
         context.record_usage(self._normalize_usage(getattr(response, "usage", None)))
         choice = response.choices[0]

@@ -130,6 +130,12 @@ def test_direct_translation_polishing_review_and_resume(source, target):
             return json.dumps({"translations": [translated] * n})
         if "prose editor" in system:
             assert f"{target_label} prose editor" in system
+            if " translation to polish]" in user:
+                n = len(
+                    re.findall(
+                        r"^\[\d+\]", user.split(" translation to polish]", 1)[1], re.MULTILINE
+                    )
+                )
             return json.dumps({"polished": [translated] * n})
         if "chapter title translator" in system:
             assert f"into {target_label}" in system

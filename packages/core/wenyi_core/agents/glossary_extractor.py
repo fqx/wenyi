@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import Any
@@ -25,6 +26,7 @@ from ..llm.json_parser import JsonParseError, parse_json_result
 from ..storage.protocol import Storage
 from . import prompts
 from .base import Agent
+from .glossary_verifier import GlossaryVerificationError, GlossaryVerifier
 
 _LOGGER = logging.getLogger(__name__)
 _HISTORY_VERSION = 1
@@ -55,6 +57,142 @@ class GlossaryExtractor(Agent):
         self._recurrence_corpus: str | None = None
         self._recurrence_matcher: GlossaryOccurrenceMatcher | None = None
         self._recurrence_cache: dict[tuple[str, str, tuple[str, ...]], bool] = {}
+
+    def seed_fixed_terms(self, store: Storage | GlossaryStore) -> None:
+        """Apply explicit user mappings without consulting a model."""
+        for source, target in self.config.pipeline.glossary_fixed_terms.items():
+            existing = store.get_term(source)
+            if existing is None:
+                store.upsert_term(GlossaryTerm(source=source, target=target))
+            elif existing.target != target or existing.status != "ok":
+                store.resolve_term(source, target)
+
+    def _verify_before_admission(
+        self,
+        terms: list[GlossaryTerm],
+        existing: list[GlossaryTerm],
+        source_text: str,
+        target_text: str,
+        store: Storage | GlossaryStore,
+    ) -> list[GlossaryTerm]:
+        """Review changed mappings with short evidence; cache before admitting any term."""
+        from ..llm.routing import resolve_routes
+
+        known = {term.source: term for term in existing}
+        fixed = self.config.pipeline.glossary_fixed_terms
+        approved: dict[str, GlossaryTerm] = {}
+        pending = []
+        unique = {term.source: term for term in terms}
+        for term in unique.values():
+            old = known.get(term.source)
+            if term.source in fixed:
+                approved[term.source] = replace(term, target=fixed[term.source])
+            elif old is not None and term.target == old.target:
+                approved[term.source] = old
+            else:
+                pending.append(term)
+        artifact_store = store if isinstance(store, Storage) else None
+        route = resolve_routes(self.config.llm)["glossary.verify"].fingerprint
+        policy = self.language_policy.task_fingerprint("glossary_verifier")
+        for start in range(0, len(pending), 16):
+            candidates = []
+            evidence = []
+            cache_keys = []
+            for term in pending[start : start + 16]:
+                match = next(
+                    (
+                        match
+                        for name in (term.source, *term.aliases)
+                        if name
+                        for match in re.finditer(re.escape(name), source_text, re.IGNORECASE)
+                        if source_matches_text(
+                            name, source_text[max(0, match.start() - 1) : match.end() + 1]
+                        )
+                    ),
+                    None,
+                )
+                if match is None:
+                    continue
+                target_at = target_text.find(term.target)
+                item = {
+                    "source": term.source,
+                    "proposed_target": term.target,
+                    "type": term.type,
+                    "existing_target": known[term.source].target if term.source in known else "",
+                    "source_context": source_text[max(0, match.start() - 220) : match.end() + 220],
+                    "draft_context": target_text[
+                        max(0, target_at - 120) : target_at + len(term.target) + 120
+                    ]
+                    if target_at >= 0
+                    else "",
+                }
+                # Candidate identity is independent of batch position and admission progress.
+                # An approved mapping remains reusable after that same mapping is stored.
+                cache_key = (
+                    "glossary/verification/"
+                    + content_hash(
+                        {
+                            "version": 2,
+                            "candidate": {
+                                key: value
+                                for key, value in item.items()
+                                if key != "existing_target"
+                            },
+                            "route": route,
+                            "policy": policy,
+                        }
+                    )
+                    + ".json"
+                )
+                saved = (
+                    artifact_store.read_artifact(cache_key) if artifact_store is not None else None
+                )
+                if saved is not None:
+                    if (
+                        not isinstance(saved, dict)
+                        or set(saved) != {"existing_target", "approved_target"}
+                        or not isinstance(saved["existing_target"], str)
+                        or (
+                            saved["approved_target"] is not None
+                            and (
+                                not isinstance(saved["approved_target"], str)
+                                or not saved["approved_target"].strip()
+                            )
+                        )
+                    ):
+                        raise GlossaryVerificationError("Invalid glossary verification checkpoint")
+                    if item["existing_target"] in {
+                        saved["existing_target"],
+                        saved["approved_target"],
+                    }:
+                        if saved["approved_target"] is not None:
+                            approved[term.source] = replace(term, target=saved["approved_target"])
+                        continue
+                candidates.append(term)
+                item["id"] = f"c{len(candidates) - 1}"
+                evidence.append(item)
+                cache_keys.append(cache_key)
+            if not candidates:
+                continue
+            reviewed = GlossaryVerifier(self.client, self.config).verify(candidates, evidence)
+            if artifact_store is not None:
+                reviewed_targets = {term.source: term.target for term in reviewed}
+                for term, item, key in zip(candidates, evidence, cache_keys):
+                    artifact_store.write_artifact(
+                        key,
+                        {
+                            "existing_target": item["existing_target"],
+                            "approved_target": reviewed_targets.get(term.source),
+                        },
+                    )
+                artifact_store.log_event(
+                    "glossary_candidates_verified",
+                    candidates=len(candidates),
+                    accepted=len(reviewed),
+                    checkpoints=cache_keys,
+                )
+            approved.update((term.source, term) for term in reviewed)
+        return [approved[source] for source in unique if source in approved]
 
     def _recurring_existing_terms(
         self,
@@ -329,6 +467,7 @@ class GlossaryExtractor(Agent):
         source. Low-frequency terms remain stored but do not repeatedly consume extraction
         context.
         """
+        self.seed_fixed_terms(store)
         all_existing = store.all_terms()
         existing = (
             self._recurring_existing_terms(all_existing, source_corpus)
@@ -342,6 +481,10 @@ class GlossaryExtractor(Agent):
         terms, aligned, unresolved = self._align_with_first_occurrences(
             terms, occurrences, store=store if isinstance(store, Storage) else None
         )
+        if self.config.pipeline.glossary_verification:
+            terms = self._verify_before_admission(
+                terms, all_existing, source_text, target_text, store
+            )
         summary = {
             "inserted": 0,
             "conflict": 0,

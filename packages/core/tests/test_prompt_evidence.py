@@ -127,7 +127,7 @@ def test_each_agent_consumes_only_local_notes_when_enabled(enabled, agent):
         json.dumps(glossary, ensure_ascii=False)[1:-1] if agent == "precision" else glossary
     ) in user
     if agent == "polisher":
-        assert ("[Current source paragraphs:" in user) is enabled
+        assert "[Current source paragraphs:" in user
 
 
 @pytest.mark.parametrize("fallback", [False, True])

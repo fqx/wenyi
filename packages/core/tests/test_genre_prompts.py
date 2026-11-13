@@ -22,7 +22,11 @@ BASELINE = Path(__file__).with_name("fixtures") / "literary_prompt_baseline.json
 # HY-MT is a local opt-in protocol added after this pinned pre-split snapshot.
 # Its genre composition and frozen resources are covered in test_hy_mt_translation.
 TASK_NAMES = tuple(
-    sorted(path.stem for path in (DATA / "tasks").glob("*.txt") if path.stem != "hy_mt_translation")
+    sorted(
+        path.stem
+        for path in (DATA / "tasks").glob("*.txt")
+        if not path.stem.startswith("hy_mt_") and path.stem != "glossary_verifier_system"
+    )
 )
 TASK_GROUPS = tuple(sorted({name.split("_")[0] for name in TASK_NAMES}))
 PLAN_CASES = {

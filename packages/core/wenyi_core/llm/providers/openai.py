@@ -49,6 +49,7 @@ def build_request_kwargs(
 
 
 class OpenAIClient(OpenAICompatibleBaseClient[OpenAIOptions]):
+    supports_response_schema = True
     default_base_url = DEFAULT_BASE_URL
     default_api_key_env = DEFAULT_API_KEY_ENV
     requires_api_key = True

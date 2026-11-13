@@ -9,7 +9,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from wenyi_core.agents.polisher import Polisher
+from wenyi_core.agents.polisher import Polisher, PolishOutputError
 from wenyi_core.agents.reviewer import Reviewer, ReviewOutputError
 from wenyi_core.glossary.store import GlossaryStore, GlossaryTerm
 from wenyi_core.llm.providers.fake import FakeClient
@@ -521,35 +521,32 @@ class TestPolisher(unittest.TestCase):
         self.assertEqual(out, ["润色甲", "润色乙"])
         self.assertEqual(client.calls[-1]["tier"], "strong")
 
-    def test_polish_mismatch_keeps_original(self):
+    def test_polish_mismatch_stops_after_bounded_retries(self):
         client = FakeClient(
             handler=lambda m, t, j: json.dumps({"polished": ["只有一段"]}, ensure_ascii=False)
         )
         p = Polisher(client, _cfg())
-        out = p.polish(["甲", "乙"])
-        self.assertEqual(
-            out, ["甲", "乙"]
-        )  # Preserve the original translation on paragraph-count mismatch.
+        with self.assertRaises(PolishOutputError):
+            p.polish(["甲", "乙"])
+        self.assertEqual(len(client.calls), p.config.pipeline.align_retry_limit + 1)
 
-    def test_polish_null_items_keep_original(self):
+    def test_polish_null_items_stop_publication(self):
         # A same-length list containing nulls must not coerce into literal "None" strings.
         client = FakeClient(
             handler=lambda m, t, j: json.dumps({"polished": [None, None]}, ensure_ascii=False)
         )
         p = Polisher(client, _cfg())
-        out = p.polish(["甲", "乙"])
-        self.assertEqual(out, ["甲", "乙"])
+        with self.assertRaises(PolishOutputError):
+            p.polish(["甲", "乙"])
 
-    def test_polish_non_string_items_keep_original(self):
+    def test_polish_non_string_items_stop_publication(self):
         client = FakeClient(
             handler=lambda m, t, j: json.dumps(
                 {"polished": [None, "润色乙", 3]}, ensure_ascii=False
             )
         )
-        with self.assertLogs("wenyi_core.agents.base", level="WARNING") as captured:
-            out = Polisher(client, _cfg()).polish(["甲", "乙", "丙"])
-        self.assertEqual(out, ["甲", "乙", "丙"])
-        self.assertTrue(any("invalid item types" in line for line in captured.output))
+        with self.assertRaises(PolishOutputError):
+            Polisher(client, _cfg()).polish(["甲", "乙", "丙"])
 
     def test_polish_continue_null_items_return_none(self):
         client = FakeClient(
@@ -566,13 +563,11 @@ class TestPolisher(unittest.TestCase):
         out = Polisher(client, _cfg()).polish_continue(turn, n=2, next_source="next")
         self.assertIsNone(out)
 
-    def test_polish_transport_failure_logs_warning(self):
-        # The centralized fallback must stay observable (audit A-2).
+    def test_polish_transport_failure_propagates_without_structural_retries(self):
         client = FakeClient(handler=lambda m, t, j: (_ for _ in ()).throw(RuntimeError("boom")))
-        with self.assertLogs("wenyi_core.agents.base", level="WARNING") as captured:
-            out = Polisher(client, _cfg()).polish(["甲"])
-        self.assertEqual(out, ["甲"])
-        self.assertTrue(any("returning fallback" in line for line in captured.output))
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            Polisher(client, _cfg()).polish(["甲"])
+        self.assertEqual(len(client.calls), 1)
 
     def test_polish_continue_appends_user_turn_to_translation_transcript(self):
         client = FakeClient(

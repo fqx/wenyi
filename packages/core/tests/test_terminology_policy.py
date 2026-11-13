@@ -125,7 +125,7 @@ def test_default_polisher_preserves_resource_and_invalidates_old_language_rules(
     expected = compose(read_text(path))
     assert dict(plan.templates)["polisher_user"] == expected
     assert dict(plan.resources)[path] == content_hash(expected)
-    assert "$source_context" not in dict(plan.templates)["polisher_user"]
+    assert "$source_context" in dict(plan.templates)["polisher_user"]
     # The shared target-language requirement intentionally invalidates the old prompt identity.
     assert plan.task_fingerprint("polisher") != (
         "964a2d08eb651aea404703d04c6017a0f29655b03f35c93a5a373016bb2fc634"

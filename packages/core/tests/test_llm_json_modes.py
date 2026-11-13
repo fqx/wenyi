@@ -119,6 +119,114 @@ def test_successful_json_object_does_not_trigger_a_schema_request(sdk):
     assert modes(calls) == ["json_object", "json_object"]
 
 
+def test_explicit_json_schema_reaches_server_without_switching_to_weaker_modes(sdk):
+    calls, state = sdk
+    schema = {
+        "type": "object",
+        "properties": {
+            "translations": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1,
+                "maxItems": 1,
+            }
+        },
+        "required": ["translations"],
+        "additionalProperties": False,
+    }
+    client = RoutedLLMClient(config())
+    assert (
+        client.complete_json(
+            [{"role": "user", "content": "Translate a paragraph"}],
+            operation="translation.body",
+            response_schema=schema,
+        )
+        == VALUE
+    )
+    assert modes(calls) == ["json_schema"]
+    assert calls[0]["response_format"]["json_schema"] == {
+        "name": "response",
+        "schema": schema,
+        "strict": True,
+    }
+    assert "json" in calls[0]["messages"][-1]["content"].lower()
+
+
+def test_explicit_schema_enables_json_when_complete_uses_its_default_mode(sdk):
+    calls, _ = sdk
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    RoutedLLMClient(config()).complete([], operation="polish.body", response_schema=schema)
+    assert modes(calls) == ["json_schema"]
+    assert calls[0]["response_format"]["json_schema"]["schema"] == schema
+
+
+def test_schema_size_is_included_in_token_reservation(sdk):
+    _, _ = sdk
+    client = RoutedLLMClient(config())
+    starts = []
+    client.set_event_sink(
+        lambda event, **data: starts.append(data) if event == "llm_request_started" else None
+    )
+    messages = [{"role": "user", "content": "Return JSON"}]
+    schema = {"type": "object", "description": "source-specific choices " * 100}
+    client.complete_json(messages, operation="polish.body", response_schema=schema)
+    expected_minimum = (
+        len(json.dumps(messages, ensure_ascii=False).encode("utf-8"))
+        + len(json.dumps(schema, ensure_ascii=False).encode("utf-8"))
+        + 256
+    )
+    assert starts[0]["estimated_tokens"] >= expected_minimum
+
+
+def test_explicit_schemas_are_request_local_and_do_not_prime_auto_negotiation(sdk):
+    calls, state = sdk
+    state.reject_object = False
+    client = RoutedLLMClient(config())
+    schemas = [
+        {"type": "object", "properties": {name: {"type": "string"}}} for name in ("one", "two")
+    ]
+    for schema in schemas:
+        client.complete_json([], operation="polish.body", response_schema=schema)
+    client.complete_json([], operation="analysis.style")
+    assert modes(calls) == ["json_schema", "json_schema", "json_object"]
+    assert [call["response_format"]["json_schema"]["schema"] for call in calls[:2]] == schemas
+    assert "json_schema" not in calls[2]["response_format"]
+
+
+@pytest.mark.parametrize("use_fallback", [False, True])
+def test_explicit_schema_survives_retry_or_model_failover(sdk, use_fallback):
+    calls, state = sdk
+    raw = config(max_retries=0 if use_fallback else 1).model_dump()
+    if use_fallback:
+        raw["models"]["second"] = {"provider": "local", "model": "second"}
+        raw["routes"] = {"polish.body": {"model": "model", "fallbacks": ["second"]}}
+    failure = error(503, "Temporarily unavailable")
+    failure.response.headers["retry-after-ms"] = "0"
+    state.on_call = lambda: setattr(state, "failure", failure if len(calls) == 1 else None)
+    schema = {
+        "type": "object",
+        "properties": {"polished": {"type": "array", "items": {"type": "string"}}},
+    }
+    assert (
+        RoutedLLMClient(LLMConfig.model_validate(raw)).complete_json(
+            [], operation="polish.body", response_schema=schema
+        )
+        == VALUE
+    )
+    assert modes(calls) == ["json_schema", "json_schema"]
+    assert all(call["response_format"]["json_schema"]["schema"] == schema for call in calls)
+
+
+def test_explicit_schema_rejection_does_not_retry_a_weaker_format(sdk):
+    calls, state = sdk
+    state.failure = error(400, "response_format json_schema is unsupported")
+    with pytest.raises(APIStatusError):
+        RoutedLLMClient(config()).complete_json(
+            [], operation="polish.body", response_schema={"type": "object"}
+        )
+    assert modes(calls) == ["json_schema"]
+
+
 def test_connectivity_stays_plain_text_and_does_not_prime_runtime_modes(sdk):
     calls, _ = sdk
     client = RoutedLLMClient(config())

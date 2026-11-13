@@ -25,6 +25,7 @@ OPERATION_NAMES = (
     "polish.body",
     "glossary.extract",
     "glossary.align_history",
+    "glossary.verify",
     "terminology.discover",
     "terminology.evidence",
     "terminology.merge",

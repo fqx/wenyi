@@ -232,8 +232,22 @@ The model receives one user message with a flat JSON object (`p0`, `p1`, ...).
 Wenyi rejects duplicate/missing/extra keys, non-string values, empty translations
 (except intentional MinerU empty targets), Markdown wrappers and trailing prose,
 then restores source order. Body requests retain alignment retries and
-single-paragraph recovery. Titles retain their existing failure handling.
-Polishing uses a fresh request instead of continuing the HY-MT conversation.
+single-paragraph recovery. If the final single-paragraph structured response is
+invalid, HY-MT uses its plain translation prompt for that paragraph. Empty and
+protocol-wrapped recovery responses are rejected. Titles retain their existing
+failure handling. Polishing uses a fresh source-aware request instead of
+continuing the HY-MT conversation.
+
+Polishing supplies a complete JSON Schema: a required `polished` array of
+nonempty strings, exactly one item per input paragraph, with no extra properties.
+Compatible and OpenAI adapters send strict `json_schema`; Gemini uses its native
+JSON schema field. Other adapters retain their existing JSON transport. Wenyi
+always validates the response locally. An explicit compatible-endpoint schema is
+never silently downgraded to `json_object`. Invalid fresh polishing receives
+`align_retry_limit` additional structural attempts and then stops without
+publishing that batch. Source paragraphs are included even when
+`terminology_context` is off, so polishing can correct mistranslations. Completed
+targets are retained; replacing earlier drafts is a separate action.
 
 Glossary, style, language guidance, synopsis, recent translations, annotation
 references and the next source paragraph remain reference data outside the source
@@ -247,6 +261,29 @@ in inference fingerprints; its prompt is frozen with translation language-policy
 resources. Completed translations remain saved and pending calls use the new
 route. Test a fresh short sample before translating a book; offline protocol
 regressions do not evaluate whole-book quality.
+
+### Glossary admission review
+
+For admission review without sending the whole book to a second extractor:
+
+```yaml
+pipeline:
+  glossary_verification: true
+  glossary_fixed_terms:
+    Protomolecule: 原分子
+    protomolecule: 原分子
+```
+
+`glossary_verification` defaults to `false`. When enabled, extraction remains on
+`glossary.extract`; only new or changed mapping candidates go to
+`glossary.verify` (the `strong` tier by default) before storage, at most 16 per
+request with short source/draft excerpts. Unchanged confirmed mappings are reused.
+The verifier accepts, corrects or rejects each candidate through a complete JSON
+Schema. Invalid verification stops admission. Decisions are checkpointed per candidate before
+writing terms, so a partial admission reuses completed decisions for the remaining
+candidates on resume. A later user mapping change invalidates an older decision.
+`glossary_fixed_terms` defaults to `{}`; explicit user mappings are seeded into
+the glossary and override model proposals without another verification call.
 
 ### Provider options
 
@@ -329,6 +366,7 @@ its stage is disabled; reachable checks follow the selected workflow switches.
 | `translation.title` | `strong` | Chapter and TOC titles |
 | `polish.body` | `strong` | Polishing, including precision synthesis |
 | `glossary.extract` | `fast` | Glossary extraction |
+| `glossary.verify` | `strong` | Review new or changed mappings before admission when enabled. |
 | `glossary.align_history` | `fast` | Earlier translation alignment |
 | `terminology.discover` | `strong` | Source-grounded person discovery |
 | `terminology.evidence` | `strong` | Whole-book source evidence |
@@ -429,7 +467,9 @@ described under [scope](#scope).
 |---|---|---|
 | `pipeline.translation_mode` | `standard` | `standard` or `three_draft_synthesis`; the latter requires `polish: true`. |
 | `pipeline.polish` | `true` | Polish translated batches; adds substantial model work. |
-| `pipeline.align_retry_limit` | `2` | Additional structural-output attempts; `0` disables them. |
+| `pipeline.align_retry_limit` | `2` | Additional structural attempts for translation, fresh polishing and glossary verification; `0` disables them. |
+| `pipeline.glossary_verification` | `false` | Review new or changed candidates before glossary admission. |
+| `pipeline.glossary_fixed_terms` | `{}` | Explicit source-to-target mappings which models cannot override. |
 | `pipeline.rolling_context_tokens` | `512` | Preceding translation budget, integer ≥ 0, counted with `cl100k_base`. |
 | `pipeline.book_understanding` | `true` | Generate full-source chapter digests and a book synopsis. |
 | `pipeline.prescan_concurrency` | `4` | Chapter-digest concurrency; use `1` for sequential work. |

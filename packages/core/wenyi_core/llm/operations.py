@@ -95,10 +95,16 @@ OPERATIONS = register_operations(
             "Polish translated paragraphs",
             "strong",
             flags=("polish",),
-            protocol_version=2,
+            protocol_version=3,
         ),
         OperationSpec("glossary.extract", "Extract glossary candidates", "fast"),
         OperationSpec("glossary.align_history", "Align terms with earlier translations", "fast"),
+        OperationSpec(
+            "glossary.verify",
+            "Verify glossary candidates before admission",
+            "strong",
+            flags=("glossary_verification",),
+        ),
         OperationSpec(
             "terminology.discover",
             "Discover source-grounded terminology",

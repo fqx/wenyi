@@ -219,8 +219,17 @@ llm:
 
 模型收到单条 user 消息，其中是 `p0`、`p1` 等键组成的扁平 JSON 对象。Wenyi 拒绝重复、
 缺失或多余的键、非字符串、空译文（MinerU 有意保留的空译文除外）、Markdown 包裹和
-尾随说明，再按原文顺序还原结果。正文保留现有对齐重试与逐段回退；标题沿用现有失败
-处理。润色发起独立请求，不续接 HY-MT 翻译对话。
+尾随说明，再按原文顺序还原结果。正文保留对齐重试与逐段回退；最终单段结构化响应
+仍无效时，使用该段的官方纯文本翻译提示词，拒绝空输出或协议包裹。标题沿用现有失败
+处理。润色发起带原文核对的独立请求，不续接 HY-MT 翻译对话。
+
+润色携带完整 JSON Schema：必需的 `polished` 数组、非空字符串元素、与输入一致的
+元素数量，并禁止额外字段。兼容接口和 OpenAI 发送严格 `json_schema`，Gemini 使用
+原生 JSON schema 字段；其他适配保留现有 JSON 传输方式。Wenyi 始终进行本地校验，
+显式请求的兼容接口 schema 不会静默降级为 `json_object`。独立润色格式无效时额外
+尝试 `align_retry_limit` 次，仍失败则停止，不发布该批次。即使未开启
+`terminology_context`，润色也会收到原文以纠正误译。已完成译文继续保留，替换旧初稿
+需要单独执行。
 
 术语、风格、语言规则、摘要、近期译文、注释参考和下一段原文作为源 JSON 之外的参考
 数据。这些参考扩展了官方最简示例，需按实际模型与语言对评估文学质量。上述采样参数
@@ -230,6 +239,25 @@ llm:
 `wenyi models list --json` 和 `models explain` 展示所选协议。协议进入推理指纹，提示词
 随翻译语言策略资源冻结。已完成译文继续保留，待处理调用采用新路由。全书翻译前先用
 新的短样本验证；离线协议回归不评估全书翻译质量。
+
+### 术语入库审核
+
+可开启入库前审核，无需让第二个抽取器重新处理整本正文：
+
+```yaml
+pipeline:
+  glossary_verification: true
+  glossary_fixed_terms:
+    Protomolecule: 原分子
+    protomolecule: 原分子
+```
+
+`glossary_verification` 默认 `false`。开启后，候选仍由 `glossary.extract` 提取，
+只有新增或译法变化的候选在入库前交给 `glossary.verify`（默认 `strong` 档）审核。
+每次最多 16 项，附带短原文与初译片段，已确认且未变化的映射直接复用。审核通过完整
+JSON Schema 接受、修正或拒绝每个候选；无效审核会停止入库。决策按候选先保存检查点，再写
+术语，部分入库后中断也能复用剩余候选的已完成审核；用户后来修改映射会使旧决策失效。`glossary_fixed_terms` 默认 `{}`，显式指定
+的用户映射会预置到术语库，优先于模型提议，不再调用模型审核。
 
 ### 提供商选项
 
@@ -307,6 +335,7 @@ BabelDOC 是独立 HTTP 服务。
 | `translation.title` | `strong` | 章节与目录标题 |
 | `polish.body` | `strong` | 润色，包括精翻综合 |
 | `glossary.extract` | `fast` | 术语抽取 |
+| `glossary.verify` | `strong` | 开启后审核新增或变更映射，通过后入库。 |
 | `glossary.align_history` | `fast` | 历史译法对齐 |
 | `terminology.discover` | `strong` | 基于原文的人物发现 |
 | `terminology.evidence` | `strong` | 全书原文取证 |
@@ -402,7 +431,9 @@ CLI 只覆盖其参数明确支持的设置；Web/Desktop 项目限制见[作用
 |---|---|---|
 | `pipeline.translation_mode` | `standard` | `standard` 或 `three_draft_synthesis`，后者要求 `polish: true`。 |
 | `pipeline.polish` | `true` | 润色已译批次，增加较多模型工作。 |
-| `pipeline.align_retry_limit` | `2` | 额外结构输出尝试次数；`0` 关闭。 |
+| `pipeline.align_retry_limit` | `2` | 翻译、独立润色和术语审核的额外结构重试次数；`0` 关闭。 |
+| `pipeline.glossary_verification` | `false` | 新增或变更候选通过审核后入库。 |
+| `pipeline.glossary_fixed_terms` | `{}` | 模型不能覆盖的显式原文到译文映射。 |
 | `pipeline.rolling_context_tokens` | `512` | 前文译文预算，整数 ≥ 0，按 `cl100k_base` 计数。 |
 | `pipeline.book_understanding` | `true` | 生成覆盖完整原文的章节梗概和全书概览。 |
 | `pipeline.prescan_concurrency` | `4` | 章节梗概并发；`1` 为顺序执行。 |

@@ -32,6 +32,8 @@ def _check_options(value: Any) -> None:
         "max_completion_tokens",
         "max_output_tokens",
         "response_format",
+        "response_schema",
+        "response_json_schema",
         "response_mime_type",
         "base_url",
         "http_options",

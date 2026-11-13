@@ -12,6 +12,8 @@ METERED_TOTAL_TOKENS = 8  # prompt 5 + completion 3, recorded by MeteredFakeClie
 
 
 def _count_numbered(text: str) -> int:
+    if " translation to polish]" in text:
+        text = text.split(" translation to polish]", 1)[1]
     return len(re.findall(r"^\[(\d+)\]", text, re.MULTILINE))
 
 
@@ -98,6 +100,7 @@ class MeteredFakeClient(FakeClient):
         operation,
         json_mode=False,
         max_tokens=None,
+        response_schema=None,
     ):
         self.usage.record(
             self.routes[operation].tier or "direct",
@@ -114,4 +117,5 @@ class MeteredFakeClient(FakeClient):
             operation=operation,
             json_mode=json_mode,
             max_tokens=max_tokens,
+            response_schema=response_schema,
         )

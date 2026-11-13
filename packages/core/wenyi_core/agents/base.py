@@ -77,13 +77,16 @@ class Agent:
         *,
         operation: str,
         max_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> tuple[Any, str]:
         """Run ``complete`` on ``messages`` and return ``(parsed_json, raw_assistant_text)``."""
+        options = {"response_schema": response_schema} if response_schema is not None else {}
         text = self.client.complete(
             messages,
             operation=operation,
             json_mode=True,
             max_tokens=max_tokens,
+            **options,
         )
         return parse_json_loose(text), text
 

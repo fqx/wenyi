@@ -97,6 +97,7 @@ class Translator(Agent):
         next_source: str = "",
         *,
         allow_empty_translations: bool = False,
+        plain_fallback: bool = False,
     ) -> tuple[list[str], Messages | None]:
         """Translate one batch and validate output types, count and (by default) nonempty content.
 
@@ -136,6 +137,7 @@ class Translator(Agent):
                         ],
                     },
                     allow_empty=allow_empty_translations,
+                    plain_fallback=plain_fallback,
                 )
             except (StructuredTranslationError, TruncatedResponseError) as error:
                 raise AlignmentError(str(error)) from error
@@ -227,6 +229,7 @@ class Translator(Agent):
             [annotation_context],
             next_source=next_source,
             allow_empty_translations=allow_empty_translations,
+            plain_fallback=True,
         )
         return out[0]
 

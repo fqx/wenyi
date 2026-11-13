@@ -1,0 +1,2 @@
+${reference_section}Translate the following text into $tgt_label. Note that you should only output the translated result without any additional explanation:
+$source_text
