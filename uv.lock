@@ -2537,6 +2537,7 @@ requires-dist = [
 name = "wenyi-cli"
 source = { editable = "packages/cli" }
 dependencies = [
+    { name = "python-dotenv" },
     { name = "rich" },
     { name = "typer" },
     { name = "wenyi-core" },
@@ -2544,6 +2545,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "rich", specifier = ">=13.7" },
     { name = "typer", specifier = ">=0.12" },
     { name = "wenyi-core", editable = "packages/core" },

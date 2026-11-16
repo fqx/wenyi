@@ -53,7 +53,7 @@ def build_request_kwargs(
 
 class OpenAIClient(OpenAICompatibleBaseClient[OpenAIOptions]):
     supports_response_schema = True
-    protocol_version = 2
+    protocol_version = 3
     default_base_url = DEFAULT_BASE_URL
     default_api_key_env = DEFAULT_API_KEY_ENV
     requires_api_key = True
@@ -68,7 +68,7 @@ class OpenAIClient(OpenAICompatibleBaseClient[OpenAIOptions]):
         response_format: dict[str, Any] | None = None,
     ) -> str:
         schema = context.response_schema
-        if not json_mode or schema is None or "anyOf" not in schema:
+        if not json_mode or schema is None:
             return super()._request(
                 messages,
                 model,
@@ -77,29 +77,41 @@ class OpenAIClient(OpenAICompatibleBaseClient[OpenAIOptions]):
                 response_format=response_format,
             )
 
-        # OpenAI permits unions as properties, but rejects an anyOf at the response root.
-        # Keep local JSON Pointers relative to the original schema after adding the envelope.
+        wrap_root = "anyOf" in schema
+
+        # OpenAI rejects root unions and array uniqueItems. Review's local validator
+        # still rejects duplicate issue IDs; only the wire schema omits that keyword.
         def relocate(value: Any) -> Any:
             if isinstance(value, dict):
-                if "$id" in value:
+                if wrap_root and "$id" in value:
                     raise ValueError(
                         "OpenAI root-union schemas with resource identifiers are not supported"
                     )
                 return {
                     key: f"#/properties/response{item[1:]}"
-                    if key == "$ref"
+                    if wrap_root
+                    and key == "$ref"
                     and isinstance(item, str)
                     and (item == "#" or item.startswith("#/"))
                     else deepcopy(item)
                     if key in {"const", "enum", "default", "examples"}
                     else relocate(item)
                     for key, item in value.items()
+                    if not (key == "uniqueItems" and value.get("type") == "array")
                 }
             if isinstance(value, list):
                 return [relocate(item) for item in value]
             return value
 
         inner_schema = relocate(schema)
+        if not wrap_root:
+            return super()._request(
+                messages,
+                model,
+                json_mode=True,
+                context=replace(context, response_schema=inner_schema),
+                response_format=response_format,
+            )
         if inner_schema.get("type") == "object" and all(
             branch.get("type") == "object" for branch in inner_schema["anyOf"]
         ):

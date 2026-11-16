@@ -70,11 +70,13 @@ wenyi -c my-config.yaml models check --for translate
 remote account or model works. See [model commands](#model-commands) for the
 optional live probe.
 
-CLI API keys come only from process environment variables. The CLI does not
-automatically load a repository-root `.env`. Supply keys locally, or load them
-from a private key file outside shared workspaces and sessions. Never put real
-keys in YAML, source control, shared logs, or conversations. Examples below use
-placeholders, not credentials.
+The CLI automatically loads `.env` from the current working directory before
+dispatching commands. Existing process environment variables take precedence;
+parent directories and the directory containing `--config` are not searched.
+Values are loaded literally without `${VARIABLE}` interpolation. Providers read
+the resulting process environment variables. Keep `.env` private and excluded
+from Git. Never put real keys in YAML, source control, shared logs, or conversations.
+Examples below use placeholders, not credentials.
 
 <a id="first-translation"></a>
 

@@ -7,9 +7,11 @@ import sys
 from collections.abc import Sequence
 from enum import Enum
 from importlib.metadata import version as package_version
+from pathlib import Path
 from typing import Any
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from typer.core import TyperGroup
 from wenyi_core.config import Config
@@ -70,6 +72,7 @@ def initializing_group(console: Console) -> type[TyperGroup]:
             **main_kwargs: Any,
         ) -> Any:
             """Locate and create a missing default config before Click parses the command."""
+            load_dotenv(Path.cwd() / ".env", override=False, interpolate=False)
             cli_args = list(args) if args is not None else sys.argv[1:]
             config_path = config_path_from_args(cli_args)
             main_kwargs["obj"] = CommandContext(

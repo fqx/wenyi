@@ -429,6 +429,7 @@ class TestCliConfig(unittest.TestCase):
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_cli.commands.workflows.require_input_file") as require_input,
             patch.dict(os.environ, {}, clear=True),
+            patch("wenyi_cli.commands.bootstrap.load_dotenv"),
         ):
             result = CliRunner().invoke(app, ["translate", missing])
 

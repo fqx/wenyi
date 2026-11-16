@@ -169,6 +169,40 @@ def test_native_openai_preserves_non_union_schemas(monkeypatch):
     assert bodies[0]["response_format"]["json_schema"]["schema"] == schema
 
 
+@pytest.mark.parametrize("kind", ["openai", "openai-compatible"])
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_array_uniqueness_is_local_for_native_openai_only(monkeypatch, kind, wrapped):
+    from wenyi_core.agents.review_schemas import fixer_schema
+
+    inner = fixer_schema("ch1:text0:seg0", "hash", ["issue-1"])
+    literal = {"uniqueItems": True}
+    inner["properties"]["literal"] = {"const": literal}
+    inner["properties"]["uniqueItems"] = {"type": "boolean"}
+    inner["required"].extend(["literal", "uniqueItems"])
+    schema = {"anyOf": [inner]} if wrapped else inner
+    original = copy.deepcopy(schema)
+    payload = {"replacement": "corrected"}
+    response = {"response": payload} if wrapped and kind == "openai" else payload
+    bodies = []
+    with _sdk(monkeypatch, [response], bodies, enforce_openai_root=kind == "openai"):
+        result = RoutedLLMClient(_config(kind=kind)).complete_json(
+            [], operation="review.fix", response_schema=schema
+        )
+    assert result == payload
+    wire = bodies[0]["response_format"]["json_schema"]["schema"]
+    if wrapped and kind == "openai":
+        wire = wire["properties"]["response"]
+    if wrapped:
+        wire = wire["anyOf"][0]
+    ids = wire["properties"]["issue_ids"]
+    assert ("uniqueItems" in ids) == (kind != "openai")
+    assert ids["minItems"] == ids["maxItems"] == 1
+    assert ids["items"]["enum"] == ["issue-1"]
+    assert wire["properties"]["literal"]["const"] == literal
+    assert wire["properties"]["uniqueItems"] == {"type": "boolean"}
+    assert schema == original
+
+
 def test_compatible_endpoints_keep_the_original_root_union(monkeypatch, root_union):
     payload = {"action": "final", "complete": True}
     bodies = []
@@ -301,8 +335,8 @@ def test_openai_adapter_protocol_invalidates_previous_request_identity(monkeypat
     from wenyi_core.llm.routing import inference_snapshot
 
     config = _config()
-    assert OpenAIClient.protocol_version == 2
+    assert OpenAIClient.protocol_version == 3
     current = inference_snapshot(config, ["review.verify"])
     with monkeypatch.context() as context:
-        context.setattr(OpenAIClient, "protocol_version", 1)
+        context.setattr(OpenAIClient, "protocol_version", 2)
         assert inference_snapshot(config, ["review.verify"]) != current

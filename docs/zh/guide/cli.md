@@ -65,8 +65,10 @@ wenyi -c my-config.yaml models check --for translate
 `models check` 只在本地检查可达操作的凭据，不能证明远端账号或模型可用。
 可选的真实连通性测试见[模型命令](#model-commands)。
 
-CLI 的 API Key 只从进程环境变量读取，不会自动加载仓库根目录 `.env`。
-请在本机设置，或从共享工作区／会话之外的私有密钥文件加载到环境中。
+CLI 在命令执行前自动加载当前工作目录中的 `.env`，已有进程环境变量优先。
+不会向父目录搜索，也不会按 `--config` 所在目录查找；值按字面加载，不展开
+`${VARIABLE}`。提供商从加载后的进程环境变量读取密钥。
+请将 `.env` 保存在本机并加入 Git 忽略规则。
 不要将真实密钥写入 YAML、版本库、共享日志或对话。下方示例只使用占位符。
 
 <a id="first-translation"></a>

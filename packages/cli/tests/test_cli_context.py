@@ -1,5 +1,6 @@
 """Invocation isolation and the installed console entry point."""
 
+import os
 from importlib.metadata import distribution
 from io import StringIO
 
@@ -10,6 +11,43 @@ from typer.testing import CliRunner
 from wenyi_cli.cli import create_app, main
 from wenyi_cli.commands.context import current_context
 from wenyi_core.atomicio import PublishError
+
+
+@pytest.mark.parametrize("existing", [None, "shell-key"])
+def test_invocation_loads_local_dotenv_before_dispatch(tmp_path, monkeypatch, existing):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WENYI_TEST_API_KEY", raising=False)
+    if existing is not None:
+        monkeypatch.setenv("WENYI_TEST_API_KEY", existing)
+    (tmp_path / ".env").write_text("WENYI_TEST_API_KEY='file-${LITERAL}-key'\n", encoding="utf-8")
+    observed = []
+    app = create_app()
+
+    @app.command()
+    def probe():
+        observed.append(os.environ.get("WENYI_TEST_API_KEY"))
+
+    result = CliRunner().invoke(app, ["probe"])
+    assert result.exit_code == 0, result.output
+    assert observed == [existing if existing is not None else "file-${LITERAL}-key"]
+
+
+def test_invocation_does_not_search_parent_directories_for_dotenv(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("WENYI_TEST_API_KEY=parent-key\n", encoding="utf-8")
+    child = tmp_path / "child"
+    child.mkdir()
+    monkeypatch.chdir(child)
+    monkeypatch.delenv("WENYI_TEST_API_KEY", raising=False)
+    app = create_app()
+    observed = []
+
+    @app.command()
+    def probe():
+        observed.append(os.environ.get("WENYI_TEST_API_KEY"))
+
+    result = CliRunner().invoke(app, ["probe"])
+    assert result.exit_code == 0, result.output
+    assert observed == [None]
 
 
 def test_help_paths_and_overrides_do_not_leak_between_invocations(tmp_path, monkeypatch):

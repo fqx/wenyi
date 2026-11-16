@@ -388,6 +388,8 @@ Empty confirmation fields never inherit preliminary allegations. Dismissed candi
 do not enter revision or count as failed fixes; unchanged replacement attempts remain invalid.
 The [structured-output transport rules](#dedicated-hy-mt-translation-models-local-patch)
 also apply here; local evidence and replacement validation remains mandatory.
+The `openai` adapter omits the unsupported `uniqueItems` schema keyword from
+requests; replacement validation still rejects duplicate issue IDs locally.
 
 <a id="limits-and-failover"></a>
 
