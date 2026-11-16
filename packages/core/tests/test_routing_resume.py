@@ -123,8 +123,8 @@ def test_fixer_protocol_revisions_invalidate_old_autofix_plans(tmp_path, monkeyp
     from wenyi_core.pipeline.autofix.autofix_plan import prepare_identity
 
     config = _config(tmp_path)
-    assert OPERATIONS["review.fix"].protocol_version == 2
-    assert OPERATIONS["autofix.fix"].protocol_version == 2
+    assert OPERATIONS["review.fix"].protocol_version == 3
+    assert OPERATIONS["autofix.fix"].protocol_version == 3
     debug = ReviewRunStore(str(tmp_path / "run"))
     current = inference_snapshot(config.llm, ("autofix.verify", "autofix.fix"))
     registry = dict(OPERATIONS)
@@ -351,6 +351,16 @@ def test_evidence_trace_is_reused_only_under_the_same_model(tmp_path):
         "stage": "review.verify",
         "allowed_refs": set(),
         "validate_final": lambda value, refs: value,
+        "final_schema": lambda refs: {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "const": "final"},
+                "complete": {"type": "boolean", "const": True},
+                "issues": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["action", "complete", "issues"],
+            "additionalProperties": False,
+        },
     }
     ReviewActionLoop(first, config, review_evidence(), ReviewTraceStore(debug)).run(**arguments)
     assert len(first.calls) == 1

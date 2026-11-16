@@ -139,6 +139,7 @@ OPERATIONS = register_operations(
             "cheap",
             workflows=("translate", "review"),
             review=True,
+            protocol_version=2,
         ),
         OperationSpec(
             "review.verify",
@@ -148,6 +149,7 @@ OPERATIONS = register_operations(
             flags=("review_agent_loop",),
             review=True,
             resumable_conversation=True,
+            protocol_version=3,
         ),
         OperationSpec(
             "review.arbitrate",
@@ -157,6 +159,7 @@ OPERATIONS = register_operations(
             flags=("review_agent_loop", "review_conflict_arbitration"),
             review=True,
             resumable_conversation=True,
+            protocol_version=2,
         ),
         OperationSpec(
             "review.fix",
@@ -165,7 +168,7 @@ OPERATIONS = register_operations(
             workflows=("translate", "review"),
             flags=("review_fix_loop",),
             review=True,
-            protocol_version=2,
+            protocol_version=3,
         ),
         OperationSpec(
             "autofix.verify",
@@ -175,6 +178,7 @@ OPERATIONS = register_operations(
             flags=("review_autofix",),
             review=True,
             resumable_conversation=True,
+            protocol_version=3,
         ),
         OperationSpec(
             "autofix.fix",
@@ -183,7 +187,7 @@ OPERATIONS = register_operations(
             workflows=("translate", "review"),
             flags=("review_autofix",),
             review=True,
-            protocol_version=2,
+            protocol_version=3,
         ),
     )
 )

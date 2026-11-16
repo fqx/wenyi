@@ -16,6 +16,7 @@ from ..models.glossary import GlossaryTerm
 from ..review.models import text_hash
 from . import prompts
 from .base import Agent
+from .review_schemas import fixer_schema
 
 _OUTPUT_FIELDS = {
     "segment_ref",
@@ -275,6 +276,7 @@ class ReviewFixer(Agent):
                 messages,
                 operation=self.operation,
                 json_mode=True,
+                response_schema=fixer_schema(segment_ref, before_hash, issue_ids),
             )
         except Exception as error:
             if trace:

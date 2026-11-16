@@ -13,31 +13,7 @@ from wenyi_core.llm.providers.fake import FakeClient
 from wenyi_core.llm.retrying import ProviderRequestError
 from wenyi_core.review.evidence import BookEvidenceIndex
 
-
-class StopAfterWrite(BaseException):
-    """Simulate process interruption after a successful atomic write."""
-
-
-class MemoryTrace:
-    """Retain snapshots by value, just as serialization does at each durable write."""
-
-    def __init__(self, stop_after: int | None = None):
-        self.data: dict[str, dict[str, Any]] = {}
-        self.snapshots: list[dict[str, Any]] = []
-        self.events: list[dict[str, Any]] = []
-        self.stop_after = stop_after
-
-    def load(self, agent_id: str) -> dict[str, Any] | None:
-        return deepcopy(self.data.get(agent_id))
-
-    def save(self, agent_id: str, snapshot: dict[str, Any]) -> None:
-        self.data[agent_id] = deepcopy(snapshot)
-        self.snapshots.append(deepcopy(snapshot))
-        if len(self.snapshots) == self.stop_after:
-            raise StopAfterWrite()
-
-    def log_event(self, event: str, **data: Any) -> None:
-        self.events.append({"event": event, **deepcopy(data)})
+from tests.review_fixtures import MemoryTrace, StopAfterWrite
 
 
 class MemoryEvidence:
@@ -88,6 +64,16 @@ def _run(
         stage=stage,
         allowed_refs={"ch0:text0:seg0"},
         validate_final=lambda data, refs: {"decision": data["decision"], "refs": sorted(refs)},
+        final_schema=lambda refs: {
+            "type": "object",
+            "properties": {
+                "action": {"const": "final"},
+                "complete": {"const": True},
+                "decision": {"type": "string"},
+            },
+            "required": ["action", "complete", "decision"],
+            "additionalProperties": False,
+        },
     )
 
 

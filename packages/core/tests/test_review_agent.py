@@ -182,6 +182,8 @@ class TestReviewAgentLoop(unittest.TestCase):
                                     "candidate_id": "r1-ch0-base0-candidate0",
                                     "index": 0,
                                     "verdict": "confirmed",
+                                    "detail": "术语不一致",
+                                    "suggestion": "统一",
                                     "reason": "ok",
                                 }
                             ],
@@ -261,6 +263,8 @@ class TestReviewAgentLoop(unittest.TestCase):
                                 "candidate_id": "r1-ch0-base0-candidate0",
                                 "index": 0,
                                 "verdict": "confirmed",
+                                "detail": "术语不一致",
+                                "suggestion": "统一",
                                 "reason": "ok",
                             }
                         ],
@@ -373,6 +377,8 @@ class TestReviewAgentLoop(unittest.TestCase):
                                     "candidate_id": "r1-ch0-base0-candidate0",
                                     "index": 0,
                                     "verdict": "confirmed",
+                                    "detail": "术语不一致",
+                                    "suggestion": "统一",
                                     "reason": "ok",
                                 }
                             ],
@@ -478,6 +484,8 @@ class TestReviewAgentLoop(unittest.TestCase):
                                     "candidate_id": "r1-ch0-base0-candidate0",
                                     "index": 0,
                                     "verdict": "confirmed",
+                                    "detail": "术语不一致",
+                                    "suggestion": "统一",
                                     "reason": "ok",
                                 }
                             ],
@@ -555,6 +563,8 @@ class TestReviewAgentLoop(unittest.TestCase):
                                     "candidate_id": "r1-ch0-base0-candidate0",
                                     "index": 0,
                                     "verdict": "confirmed",
+                                    "detail": "术语不一致",
+                                    "suggestion": "统一",
                                     "reason": "ok",
                                 }
                             ],

@@ -2,7 +2,9 @@
 
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 from wenyi_core.config import Config
 from wenyi_core.models.document import Chapter, Segment
@@ -10,6 +12,32 @@ from wenyi_core.models.glossary import GlossaryTerm
 from wenyi_core.review.evidence import BookEvidenceIndex
 from wenyi_core.storage.file import FileStorage
 from wenyi_core.storage.run_store import STATUS_DONE
+
+
+class StopAfterWrite(BaseException):
+    """Simulate process interruption after a successful atomic write."""
+
+
+class MemoryTrace:
+    """Retain snapshots by value, just as serialization does at each durable write."""
+
+    def __init__(self, stop_after: int | None = None):
+        self.data: dict[str, dict[str, Any]] = {}
+        self.snapshots: list[dict[str, Any]] = []
+        self.events: list[dict[str, Any]] = []
+        self.stop_after = stop_after
+
+    def load(self, agent_id: str) -> dict[str, Any] | None:
+        return deepcopy(self.data.get(agent_id))
+
+    def save(self, agent_id: str, snapshot: dict[str, Any]) -> None:
+        self.data[agent_id] = deepcopy(snapshot)
+        self.snapshots.append(deepcopy(snapshot))
+        if len(self.snapshots) == self.stop_after:
+            raise StopAfterWrite()
+
+    def log_event(self, event: str, **data: Any) -> None:
+        self.events.append({"event": event, **deepcopy(data)})
 
 
 def _config() -> Config:

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..transport import Messages, ResolvedModel
+from ..transport import Messages, RequestContext, ResolvedModel
 from ..usage import UsageSample
 from ._openai_compatible import (
     OpenAICompatibleBaseClient,
@@ -50,9 +53,79 @@ def build_request_kwargs(
 
 class OpenAIClient(OpenAICompatibleBaseClient[OpenAIOptions]):
     supports_response_schema = True
+    protocol_version = 2
     default_base_url = DEFAULT_BASE_URL
     default_api_key_env = DEFAULT_API_KEY_ENV
     requires_api_key = True
+
+    def _request(
+        self,
+        messages: Messages,
+        model: ResolvedModel[OpenAIOptions],
+        *,
+        json_mode: bool,
+        context: RequestContext,
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
+        schema = context.response_schema
+        if not json_mode or schema is None or "anyOf" not in schema:
+            return super()._request(
+                messages,
+                model,
+                json_mode=json_mode,
+                context=context,
+                response_format=response_format,
+            )
+
+        # OpenAI permits unions as properties, but rejects an anyOf at the response root.
+        # Keep local JSON Pointers relative to the original schema after adding the envelope.
+        def relocate(value: Any) -> Any:
+            if isinstance(value, dict):
+                if "$id" in value:
+                    raise ValueError(
+                        "OpenAI root-union schemas with resource identifiers are not supported"
+                    )
+                return {
+                    key: f"#/properties/response{item[1:]}"
+                    if key == "$ref"
+                    and isinstance(item, str)
+                    and (item == "#" or item.startswith("#/"))
+                    else deepcopy(item)
+                    if key in {"const", "enum", "default", "examples"}
+                    else relocate(item)
+                    for key, item in value.items()
+                }
+            if isinstance(value, list):
+                return [relocate(item) for item in value]
+            return value
+
+        inner_schema = relocate(schema)
+        if inner_schema.get("type") == "object" and all(
+            branch.get("type") == "object" for branch in inner_schema["anyOf"]
+        ):
+            # The branches already enforce object type. An otherwise empty object container
+            # fails OpenAI's requirement that every explicit object declare closed properties.
+            del inner_schema["type"]
+        wire_schema = {
+            "type": "object",
+            "properties": {"response": inner_schema},
+            "required": ["response"],
+            "additionalProperties": False,
+        }
+        raw = super()._request(
+            messages,
+            model,
+            json_mode=True,
+            context=replace(context, response_schema=wire_schema),
+            response_format=response_format,
+        )
+        try:
+            envelope = json.loads(raw)
+        except ValueError:
+            raise ValueError("OpenAI structured response envelope is invalid") from None
+        if not isinstance(envelope, dict) or set(envelope) != {"response"}:
+            raise ValueError("OpenAI structured response envelope is invalid")
+        return json.dumps(envelope["response"], ensure_ascii=False)
 
     def _normalize_usage(self, usage: Any) -> UsageSample | None:
         return normalize_openai_usage(usage, separate_cache_writes=False)

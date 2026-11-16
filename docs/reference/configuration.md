@@ -379,6 +379,16 @@ its stage is disabled; reachable checks follow the selected workflow switches.
 | `autofix.verify` | Resolved `review.verify` route | Publication evidence verification |
 | `autofix.fix` | Resolved `review.fix` route | Publication revision |
 
+Review and Autofix supply task-specific JSON Schemas for screening, evidence actions,
+arbitration, and replacements, including paragraph counts, candidate identities and
+citable evidence references. Evidence-exhausted turns permit only final decisions.
+Verification verdicts concern the alleged error: `confirmed` requires independent
+source-based error details and a concrete correction; `dismissed` requires a reason.
+Empty confirmation fields never inherit preliminary allegations. Dismissed candidates
+do not enter revision or count as failed fixes; unchanged replacement attempts remain invalid.
+The [structured-output transport rules](#dedicated-hy-mt-translation-models-local-patch)
+also apply here; local evidence and replacement validation remains mandatory.
+
 <a id="limits-and-failover"></a>
 
 ### Quotas, budgets, and failover

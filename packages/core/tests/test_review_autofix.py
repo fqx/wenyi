@@ -76,6 +76,56 @@ def _agent_final(user: str) -> str:
 
 
 class TestReviewAutofix(unittest.TestCase):
+    def test_correct_baseline_is_dismissed_without_fixer_or_failure(self):
+        def handler(messages, tier, json_mode):
+            user = messages[-1]["content"]
+            assert "evidence-based review agent" in messages[0]["content"]
+            candidate_ids = re.findall(r'"candidate_id":\s*"([^"]+)"', user)
+            return json.dumps(
+                {
+                    "action": "final",
+                    "complete": True,
+                    "decisions": [
+                        {
+                            "candidate_id": candidate_id,
+                            "verdict": "dismissed",
+                            "reason": "原译与原文含义一致，无需修改。",
+                        }
+                        for candidate_id in candidate_ids
+                    ],
+                    "new_issues": [],
+                }
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = _store(directory)
+            outcome = _outcome(
+                store,
+                issues=[
+                    {
+                        "issue_id": "review-00001",
+                        "issue_key": "issue-1",
+                        "chapter": 0,
+                        "index": 0,
+                        "type": "mistranslation",
+                        "detail": "原译正确。",
+                        "suggestion": "No change",
+                        "evidence_refs": [],
+                    }
+                ],
+            )
+            client = FakeClient(handler=handler)
+            fixed = Orchestrator(
+                _config(str(Path(directory, "state"))), client=client
+            )._review_autofix.run(store, outcome, [])
+            self.assertEqual(store.load_chapter(0).text_segments[0].target, "正式译文。")
+            self.assertEqual([call["operation"] for call in client.calls], ["autofix.verify"])
+            self.assertEqual(fixed.result["autofix"]["failed_issue_count"], 0)
+            self.assertEqual(fixed.result["autofix"]["applied_segment_count"], 0)
+            index = json.loads(Path(outcome.run_dir, "autofix", "index.json").read_text())
+            self.assertEqual(index["status"], "completed")
+            self.assertEqual([record["status"] for record in index["records"]], ["dismissed"])
+
     def test_export_punctuation_setting_does_not_rewrite_autofix_target(self):
         with tempfile.TemporaryDirectory() as directory:
             store = _store(directory)

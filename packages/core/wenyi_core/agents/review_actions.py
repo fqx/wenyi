@@ -13,6 +13,7 @@ from ..llm.json_parser import parse_json_result
 from ..llm.retrying import is_resumable_provider_interrupt
 from ..review.contracts import EvidenceTools, ReviewTrace
 from ..review.models import clean_text
+from .review_schemas import action_schema
 
 
 class ReviewLoopProtocolError(WenyiError, ValueError):
@@ -141,6 +142,7 @@ class ReviewActionLoop:
         stage: str,
         allowed_refs: set[str],
         validate_final: Callable[[dict[str, Any], set[str]], Any],
+        final_schema: Callable[[set[str]], dict[str, Any]],
     ) -> tuple[Any | None, str]:
         """Run up to N evidence rounds plus a final call.
 
@@ -247,6 +249,10 @@ class ReviewActionLoop:
                             sent_messages,
                             json_mode=True,
                             operation=stage,
+                            response_schema=action_schema(
+                                final_schema(conversation.allowed_refs),
+                                allow_evidence=conversation.evidence_rounds < max_rounds,
+                            ),
                         )
                     except Exception as error:
                         turn["status"] = "failed"

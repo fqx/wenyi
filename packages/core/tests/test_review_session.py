@@ -147,7 +147,12 @@ def test_provider_interrupt_resumes_review_and_publishes_once(tmp_path, failed_o
                 {
                     "action": "final",
                     "decisions": [
-                        {"candidate_id": candidate, "verdict": "confirmed"}
+                        {
+                            "candidate_id": candidate,
+                            "verdict": "confirmed",
+                            "detail": "原文信息未完整表达",
+                            "suggestion": "补全信息",
+                        }
                         for candidate in re.findall(r'"candidate_id":\s*"([^"]+)"', user)
                     ],
                     "complete": True,

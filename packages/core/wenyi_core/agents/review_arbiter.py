@@ -11,6 +11,7 @@ from ..llm.base import LLMClient
 from ..review.contracts import EvidenceQueries, ReviewTrace
 from ..review.models import clean_text, normalize_value
 from .review_actions import ReviewActionLoop, ReviewLoopProtocolError, validate_evidence_refs
+from .review_schemas import arbitration_schema
 
 _MAX_ARBITRATION_PROPOSALS = 32
 _MAX_ARBITRATION_PAYLOAD_BYTES = 96_000
@@ -205,6 +206,11 @@ class ReviewConflictArbiter:
             stage="review.arbitrate",
             allowed_refs=allowed_refs,
             validate_final=validate_final,
+            final_schema=lambda refs: arbitration_schema(
+                conflict_id,
+                [group[0]["consistency"]["proposed_value"] for group in proposal_groups.values()],
+                refs,
+            ),
         )
         if result is not None:
             return result

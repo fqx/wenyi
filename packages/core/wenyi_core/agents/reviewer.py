@@ -14,6 +14,7 @@ from ..llm.json_parser import parse_json_result
 from ..llm.retrying import TruncatedResponseError
 from . import prompts
 from .base import Agent
+from .review_schemas import scanner_schema
 
 
 class ReviewOutputError(WenyiError, ValueError):
@@ -79,6 +80,7 @@ class Reviewer(Agent):
                 messages,
                 operation="review.scan",
                 json_mode=True,
+                response_schema=scanner_schema(len(sources)),
             )
         except Exception as error:
             if trace:

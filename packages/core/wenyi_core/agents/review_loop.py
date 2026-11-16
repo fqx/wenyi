@@ -17,6 +17,7 @@ from ..review.models import (
 )
 from . import prompts
 from .review_actions import ReviewActionLoop, ReviewLoopProtocolError, validate_evidence_refs
+from .review_schemas import verification_schema
 
 _ISSUE_TYPES = {"missing", "added", "mistranslation", "terminology", "pronoun"}
 
@@ -183,10 +184,8 @@ class ReviewAgentLoop:
                     continue
                 if verdict != "confirmed":
                     raise ReviewLoopProtocolError("invalid_candidate_verdict")
-                detail = clean_text(decision.get("detail")) or clean_text(candidate.get("detail"))
-                suggestion = clean_text(decision.get("suggestion")) or clean_text(
-                    candidate.get("suggestion")
-                )
+                detail = clean_text(decision.get("detail"))
+                suggestion = clean_text(decision.get("suggestion"))
                 if not detail or not suggestion:
                     raise ReviewLoopProtocolError("confirmed_issue_missing_text")
                 kept.append(
@@ -248,6 +247,9 @@ class ReviewAgentLoop:
             stage=self.operation,
             allowed_refs=allowed_refs,
             validate_final=validate_final,
+            final_schema=lambda refs: verification_schema(
+                [candidate["candidate_id"] for candidate in candidates], len(sources), refs
+            ),
         )
         if result is None:
             fallback = [
