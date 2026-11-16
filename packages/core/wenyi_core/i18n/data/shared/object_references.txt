@@ -1,0 +1,2 @@
+Immutable object references (read-only, not missing prose):
+The editable source omits object contents; source offsets identify insertion points. Reference markers identify objects but need not appear in the current translation. Do not introduce a marker absent from the current translation.

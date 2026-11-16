@@ -37,8 +37,11 @@ settings-section availability in one module. Register new feature pages, their
 lazy loader and any navigation entry there; do not create parallel route tables,
 warm-up lists or sidebar lists in the hosts.
 
-The application renders URL routes from the manifest and warms page chunks at
-startup. Navigation prefetches the same loader on pointer entry and keyboard focus.
+The application renders URL routes from the manifest. After yielding the first
+paint, it warms one page chunk at a time during foreground idle periods, with a
+spaced timer fallback on hosts without idle callbacks. Hiding or unmounting cancels
+queued warm-up work. Navigation prefetches the same loader immediately on pointer
+entry and keyboard focus.
 Retain URL routing and the wildcard redirect; route aliases can share one loader.
 Settings sections use capability availability rather than assuming both hosts expose
 the same native panels.
@@ -91,6 +94,13 @@ Apply these query rules:
    change, never show a previous project's metadata, progress or editable state as
    the newly selected one. Keeping the shell is not permission to mix query identities.
 
+Progress subscriptions coalesce ordinary batch refreshes, but reconcile terminal
+state, errors and reconnects immediately. On the first connection, compare the
+authenticated snapshot with completed initial HTTP reads before requesting them
+again; a partial socket project must never replace a complete HTTP detail.
+Retain a bounded reconciliation fallback for missing snapshots, polling for
+missed events, and a trailing read when a terminal event overlaps an initial fetch.
+
 Short code-loading placeholders should not flash “Loading…” text. Initial data
 loading can use localized inline copy and `role="status"`. Reuse the existing
 `.route-placeholder`/`.runtime-placeholder` animations, including their
@@ -99,6 +109,28 @@ loading can use localized inline copy and `role="status"`. Reuse the existing
 Use inline errors for recoverable operations; never catch a render error and return
 a blank page. Page code must not use `location.reload()` as ordinary retry behavior.
 Long tasks should not block navigation or replace the whole page.
+
+## Continuous chapter reader
+
+Proofreading uses a virtual continuous scroll surface, not chapter pagination.
+The viewport requests 32-paragraph windows and keeps neighboring windows ready;
+abandoned requests are cancelled and inactive windows are evicted. Dense reader
+positions exclude whitespace-only sources but include headings. Stable segment IDs,
+not positions, identify edits and deep links.
+
+The window endpoint accepts at most 256 paragraphs. Translation refresh submits
+known paragraph revisions and receives only changed targets and before-polish
+values, never source text. Apply a response only if its previous revision still
+matches the cached paragraph. Terminal events and Desktop foreground reconciliation
+refresh targets, not immutable source windows. Unsaved editor drafts remain separate.
+Review issues load only when expanded.
+
+Selection endpoints and an open editor retain their needed paragraphs. Copying
+across unloaded rows reads bounded windows rather than mounting the intervening DOM.
+Browser find/select-all cannot cover unmounted text; there is no chapter-wide search.
+Use the opt-in 65,000-paragraph performance suite in both hosts to check bounded
+mounting, random deep links, selection, incremental updates and editor conflicts.
+Mocked browser timings do not establish native WebView or database performance.
 
 ## Accessibility and semantic slots
 

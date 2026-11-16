@@ -208,6 +208,11 @@ for (const scope of ["global", "project"] as const) {
     await page.getByLabel("Apply autofixes to the saved translation after review", { exact: true }).uncheck();
     await page.getByRole("button", { name: "Save configuration", exact: true }).click();
     await expect.poll(() => writes).toBe(1);
+    // The request can arrive before its saved response has updated the form.
+    await expect(page.getByText(
+      scope === "global" ? "Global settings saved" : "Project settings saved",
+      { exact: true },
+    )).toBeVisible();
     await expect(page.getByRole("button", { name: "Save configuration", exact: true })).toBeEnabled();
     const expected = {
       ...document,
@@ -221,6 +226,9 @@ for (const scope of ["global", "project"] as const) {
     await yaml.fill(JSON.stringify(tuned));
     await page.getByRole("button", { name: "Validate configuration", exact: true }).click();
     await expect(page.getByText("Configuration is valid but not saved yet", { exact: true })).toBeVisible();
+    await expect.poll(async () =>
+      JSON.parse(await yaml.inputValue()).segment.max_tokens_per_batch,
+    ).toBe(3100);
     expect(writes).toBe(1);
     if (scope === "global") await page.getByRole("link", { name: "Workflow", exact: true }).click();
     await page.getByLabel("Book understanding", { exact: true }).uncheck();

@@ -51,6 +51,11 @@ wider page; see [BabelDOC](#babeldoc).
   Paragraph-paired formats place that version first; PDF places it on the left.
 - EPUB/HTML source text is subdued by default.
   `output.bilingual_preserve_source_style: true` inherits normal book styling.
+  For template-backed input, source blocks retain their complete original content
+  and inline structure, including formulas, images, emphasis, code, ruby and links,
+  regardless of source language or this styling option. Source-copy IDs and their
+  references are remapped to avoid collisions with the translation; image copies
+  reference the same asset. Paragraph wrappers may be adapted for bilingual layout.
 - DOCX source text defaults to normal body styling, without forced gray text,
   highlighting or reduced font size. The same preservation option restores recorded
   source character styles, including mixed spans in paragraphs and tables.
@@ -65,8 +70,8 @@ platform interfaces rather than the CLI's source-adjacent directory.
 
 EPUB-to-EPUB export attempts to backfill the original XHTML templates, retaining
 styles, images, table of contents, anchors and internal links. It merges split
-continuations into their original logical paragraphs. Original source copies in
-bilingual output retain their own markup without duplicating anchor IDs.
+continuations into their original logical paragraphs. Source preservation follows
+the [bilingual-output rules](#naming-and-bilingual-output).
 
 High-confidence footnote/endnote references supply their source note bodies as
 translation context. Ordinary navigation links, backlinks and external links are
@@ -79,6 +84,24 @@ notes may need model requests. Unusable/conflicting placements degrade to clicka
 end markers instead of dropping the translation or link. Turning alignment off
 avoids its calls but can lose inline placement. A full translation run can retry
 fallback annotations; export alone does not.
+
+Inline MathML and other objects embedded within prose use protected markers such as
+`〘object:ID〙`. Their original content is supplied through the same read-only
+annotation-reference context as notes. Unchanged, unique markers locate objects
+without an extra alignment request, preserving their order in the translated text
+even when adjacent. With `pipeline.annotation_alignment` enabled, broken markers
+receive one repair attempt using mechanical error details, source text and read-only
+object references. Repair cannot rewrite the translated prose. Unresolved objects
+remain pending and are omitted with warnings in EPUB/HTML export; the prose and
+valid objects remain, without moving failed objects to the paragraph end.
+Inspect these warnings: omitted formulas can change meaning.
+Known unclosed markers are cleaned only where the boundary is unambiguous;
+uncertain fragments remain visible rather than risking deletion of prose.
+Unchanged completed failures are not charged again on resume. Editing the target
+allows another repair attempt. Export itself never calls the model. Old EPUB
+projects acquire the references on translation resume, preserving saved translations.
+Standalone formula blocks and text-free media at paragraph boundaries retain their
+original structural positions.
 
 Navigation follows saved chapter boundaries. A TOC fragment missing from a uniquely
 targeted resource can still establish a boundary at that resource's start.
@@ -215,13 +238,18 @@ Before contacting the bridge, Wenyi checks selected pages for image-only content
 If no extractable text layer is found, use MinerU or run OCR first. Chapter grouping
 uses PDF bookmarks, with one chapter when no outline is available.
 
-With a directory-row-capable bridge, aligned numbered contents entries with dot
-leaders and page numbers are translated independently and filled back into their
-original row regions, including entries containing formulas. Ordinary prose line
-wrapping remains reflowable. This conservative detection is not general table or
-contents-column reconstruction. Update both Wenyi and the bridge, then import into
-fresh state to obtain row metadata; existing parsed projects and bridge sessions
-are not automatically migrated.
+With a row-capable bridge, aligned numbered contents entries with dot leaders and
+page numbers, and confidently detected list items with repeated unknown leading
+glyphs, are translated independently and filled back into their original regions.
+The list detector requires at least three matching markers, aligned body starts
+and multiple indented continuation lines; it does not guess a missing Unicode
+mapping or replace unknown characters with bullets. Original marker glyphs and
+complete formula objects remain protected. Ordinary prose wrapping stays
+reflowable. This conservative detection is not general table, bibliography or
+list-layout reconstruction; wrapped list text does not yet gain hanging
+indentation. Update Wenyi and the bridge, then import into fresh state to obtain
+row metadata; existing parsed projects and bridge sessions are not automatically
+migrated.
 
 For translation continuity, only prose units supply preceding/following
 prose context. Explicit headings bound sections; decorations, tables, captions and
@@ -234,24 +262,40 @@ or whitespace-only targets fall back to original paragraph text for that export,
 without changing saved targets. Layout boxes and role labels are omitted by default.
 Fonts, text expansion and the external engine still limit layout fidelity.
 
-With an annotation-capable bridge, Wenyi uses its shared annotation aligner to
-locate PDF formulas, superscript/citation markers, mixed styles and linked text in
-the completed translation. The bridge restores original formula/marker objects
-and styles, and rebuilds URI and internal page links against the typeset glyphs.
+With a `protected-objects-v1` bridge, mathematical expressions and their adjacent
+variables use opaque object markers through translation, polishing, Review and
+Autofix. As with EPUB objects, models receive available object contents as read-only
+context for understanding surrounding prose, while preserving the markers instead
+of rewriting formulas. PDF references use extracted text; the bridge keeps the
+original glyphs, fonts and relative geometry as the sole source for formula output.
+Missing, duplicated or damaged markers use the same bounded repair as EPUB objects.
+If repair fails, export warns and omits only unresolved objects, retaining the
+translated prose and valid formulas. This requires an updated bridge advertising
+`protected-object-omission-v1`; older bridges must be updated and restarted.
+Inspect omitted formulas before relying on the result. Reimport with updated Wenyi and
+bridge versions to obtain protection and formula references; existing projects and
+sessions are not upgraded in place. Older bridges without reference text retain
+object markers but provide only a generic object description.
+Recognition still depends on native formula detection, mathematical character and
+font evidence, and grouping boundaries; verify formula coverage and final layout.
+
+Wenyi's shared annotation aligner locates ordinary mixed styles and linked text.
+The bridge restores original objects and styles, and rebuilds URI and internal page links against the typeset glyphs.
 Resolved named destinations, commonly used by citation links, are supported.
 Internal links to pages excluded from the export are omitted; other PDF action
-types are not reconstructed. Formula recognition still depends on BabelDOC.
+types are not reconstructed.
 
 Keep `pipeline.annotation_alignment` enabled to locate translated PDF annotations.
-Export applies valid items independently: successful links, styles, formulas and
-markers remain even when another item in the same paragraph fails. Missing,
+Ordinary annotations and legacy unprotected formulas are best effort: successful
+items remain even when another ordinary item in the same paragraph fails. Missing,
 invalid, stale or fallback positions are omitted without guessing locations,
 blocking export or replacing the translated body with source text. Conflicting
-formulas or incompatible styles omit only the conflicting items.
+legacy formulas or incompatible styles omit only the conflicting items.
 
 Export itself makes no model calls. Resume translation refreshes missing/stale
-alignment after editing saved targets, but does not automatically retry unchanged
-PDF fallback items in a repair pass. CLI logs contain per-kind placement-validation
+alignment after editing saved targets. Special-object repair records completed
+attempts to avoid repeated charges; ordinary PDF fallback items are not automatically
+retried while the target is unchanged. CLI logs contain per-kind placement-validation
 and application rates, skipped counts and reasons; the bridge session's
 `annotation_stats.json` includes per-item IDs. These rates measure validation and
 application, not proven semantic accuracy, and separate translated text from

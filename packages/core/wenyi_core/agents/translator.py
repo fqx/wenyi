@@ -7,6 +7,7 @@ entire paragraphs from being omitted.
 
 from __future__ import annotations
 
+from ..alignment.objects import marked_sources
 from ..llm.json_parser import JsonParseError
 from ..llm.retrying import TruncatedResponseError
 from ..models.glossary import GlossaryTerm
@@ -81,7 +82,16 @@ class Translator(Agent):
                     raise ValueError(
                         f"Annotation {item_index} in paragraph {segment_index} has no string source"
                     )
-                segment_items.append({"target_key": target_key, "source": source})
+                reference = {"target_key": target_key, "source": source}
+                if "marker" in item:
+                    if not isinstance(item["marker"], str) or not isinstance(
+                        item.get("source_offset"), str
+                    ):
+                        raise ValueError(
+                            "Protected object context requires a marker and source offset"
+                        )
+                    reference.update(marker=item["marker"], source_offset=item["source_offset"])
+                segment_items.append(reference)
             normalized.append(segment_items)
         return normalized
 
@@ -106,12 +116,14 @@ class Translator(Agent):
         Returns the translations and the three-turn transcript for optional polish continuation.
         """
         n = len(sources)
+        model_sources = marked_sources(sources, annotation_contexts or [[] for _ in sources])
         if uses_hy_mt(self.config, "translation.body"):
             try:
                 items = translate(
                     self,
-                    sources,
+                    model_sources,
                     operation="translation.body",
+                    object_guidance=prompts.protected_object_guidance(model_sources),
                     references={
                         "style": style,
                         "book_synopsis": book_synopsis,
@@ -120,6 +132,7 @@ class Translator(Agent):
                         "glossary": prompts.render_glossary(
                             glossary_terms,
                             source_lang=self.src,
+                            genre=self.language_policy.context.genre,
                             note_source="\n".join(sources)
                             if self.config.pipeline.terminology_context
                             else None,
@@ -147,7 +160,7 @@ class Translator(Agent):
             "translator_system",
             src=self.src,
             tgt=self.tgt,
-        )
+        ) + prompts.protected_object_guidance(model_sources)
         user = self.render(
             "translator_user",
             src=self.src,
@@ -169,7 +182,7 @@ class Translator(Agent):
             context=context or "(none)",
             n=n,
             n_minus_1=n - 1,
-            numbered_source=prompts.numbered(sources),
+            numbered_source=prompts.numbered(model_sources),
             next_source=prompts.render_source_reference(next_source),
         )
         messages: Messages = [

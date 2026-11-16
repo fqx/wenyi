@@ -9,6 +9,7 @@ from threading import Lock
 from typing import Any
 
 from ..glossary.store import GlossaryTerm, source_matches_text, term_match_sources
+from ..markup.contexts import object_contexts_for_segments
 from ..models.document import Chapter
 from .models import SegmentRef, normalize_value
 
@@ -35,6 +36,7 @@ class BookEvidenceIndex:
         *,
         source_lang: str = "auto",
         target_overrides: Mapping[tuple[int, int], str] | None = None,
+        annotation_context_registry: dict[str, Any] | None = None,
     ):
         """Build the read-only whole-book evidence index.
         target_overrides maps chapter.index/text_index pairs to shadow translations visible
@@ -46,14 +48,19 @@ class BookEvidenceIndex:
         flattened: list[SegmentRef] = []
         by_location: dict[tuple[int, int], int] = {}
         chapter_digests: dict[int, str] = {}
+        self._object_contexts: dict[tuple[int, int], list[dict[str, str]]] = {}
         overrides = target_overrides if target_overrides is not None else {}
         for chapter in chapters:
             chapter_digests[chapter.index] = str(chapter.meta.get("source_digest", "") or "")
+            contexts = object_contexts_for_segments(
+                chapter.text_segments, annotation_context_registry
+            )
             for text_index, segment in enumerate(chapter.text_segments):
                 position = len(flattened)
                 location = (chapter.index, text_index)
                 baseline_target = segment.target or ""
                 has_override = location in overrides
+                self._object_contexts[location] = contexts[text_index]
                 flattened.append(
                     SegmentRef(
                         global_ordinal=position,
@@ -93,6 +100,18 @@ class BookEvidenceIndex:
         """Return a paragraph reference by chapter and text_segments index."""
         position = self._by_location.get((chapter, text_index))
         return self.segments[position] if position is not None else None
+
+    def object_contexts(
+        self,
+        chapter: int,
+        text_index: int,
+        count: int = 1,
+    ) -> list[list[dict[str, str]]]:
+        """Expose read-only object hints without changing source/target evidence hashes."""
+        return [
+            [dict(item) for item in self._object_contexts.get((chapter, index), [])]
+            for index in range(text_index, text_index + count)
+        ]
 
     def canonical_term(self, query: str) -> tuple[GlossaryTerm | None, list[str]]:
         """Resolve a source/alias to a canonical term; return candidate sources when ambiguous."""

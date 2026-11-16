@@ -48,6 +48,17 @@ A failed synopsis group invalidates the whole synopsis; stale retained analysis 
 not be injected as a current synopsis. Preparation never extracts or seeds glossary
 entries.
 
+Prescan content budgets use the shared `cl100k_base` token estimator, not character
+counts or a provider-specific tokenizer. The source and reduction limits come from
+the [synopsis settings](../reference/configuration.md#translation).
+Oversized source and individual digests are split into the fewest chunks that fit,
+as evenly as complete Unicode characters permit. Merge groups retain intact digest
+order and count newline separators. Style and glossary context have separate
+4,000- and 6,000-token budgets; prompt instructions and formatting are additional,
+so these are not whole-request context limits. Budget-only changes preserve
+verified complete digests and cached synopses; unfinished chapters use the current
+budgets on retry without discarding other completed work.
+
 <a id="translation-checkpoints"></a>
 
 ## Stable state and translation checkpoints
@@ -74,6 +85,95 @@ A completed target batch with no glossary checkpoint requires extraction, not
 retranslation. A fully checkpointed batch skips both. Chapter completion follows
 its required batch and chapter-level work. Keep interruption tests at the boundaries
 between target persistence, alignment and glossary checkpointing.
+
+`wenyi_core.alignment` owns the format-independent text-location contract, not DOM,
+storage or provider behavior. `AlignmentUnit` requests points/ranges in immutable
+source/target text; `TextAligner` returns digest-bound `aligned` or `unresolved`
+placements. Offsets count Unicode characters. Unresolved placements have no offsets.
+A point normally follows its translated referent; supplying an `object_reference`
+instead requests the insertion boundary of an omitted immutable object. Format
+adapters supply that reference and decide rendering policy: markup notes can become
+paragraph-end fallbacks, protected objects become pending, and DOCX retains its style
+fallback policy. The model agent does not inspect format-specific relation tags.
+
+Protected-object transport lives in `alignment.objects`. Each `ObjectAnchor` supplies
+an ID, marker and original source boundary; it needs no EPUB metadata. Marker IDs use
+ASCII letters, digits and `_ . : -`. Stored source stays unchanged; markers are added
+only to model inputs. Once all logical-paragraph slices are complete, validate the
+whole response before consuming tokens, including tokens crossing slice boundaries.
+Unique exact copies establish offsets and `target_order`; coincident objects follow
+this target order, not DOM order. Unordered legacy placements retain stable caller
+order without invalidating paid caches. Literal source tokens are never consumed.
+Missing, duplicate, unknown and malformed tokens produce mechanical diagnostics.
+Cleanup consumes complete tokens and exact known unclosed tokens only when their ID
+boundary is unambiguous; uncertain fragments remain verbatim rather than consuming prose.
+`alignment.object_repair.repair_object_markers` is the shared bounded repair entry.
+Requests use the existing aligner with `validation_errors`, marked source, immutable
+target and read-only object references. No human semantic diagnosis is added.
+The existing local-patch validator rejects prose changes, ambiguous searches and
+invalid marker counts; the shared entry validates result identity, digest and offsets.
+Successful positions remain cached. `object_repairs` records input digests, mechanical
+errors and outcomes per object; completed failures do not repeat for unchanged inputs.
+Changed prose or object metadata allows a new attempt. Calls use `annotation.align`
+and existing usage accounting. The translation tail and post-Review pass use the
+same service; standalone export never calls a model.
+Pronunciation-hint cleanup must not remove object markers.
+
+Read-only references are projected by `markup.contexts`, independently of pipeline,
+storage, LLM calls and writers. Format adapters supply `Segment.meta["annotations"]`
+with a logical `source_length` and ordered `items`; the compatibility selector also
+accepts existing `epub_annotations` and `pdf_annotations` without migrating saved
+state. An object item supplies `relation: "inline_object"`, stable `id`/`target_key`,
+`marker`, and clean-source point offsets. Content comes from registered `source_blocks`,
+then embedded `object_source`, with a generic description when neither is available.
+The projection assigns references to continuation slices, deduplicates destinations
+and returns `target_key`, `source`, `marker` and slice-local `source_offset`.
+Notes share the slicing machinery but are not exposed as immutable objects in Review.
+New format adapters can use this contract without adding format branches to model
+workflows; extraction, original-object ownership and restoration remain format-owned.
+
+Translation, polishing, precision, Review and Autofix consume the same projection
+and shared read-only instructions, without reference reliability tiers. Review and
+Autofix receive the registry explicitly from their application services; evidence
+indices do not read storage. References stay separate from editable source/target
+evidence. Review reuse also binds the effective object reference prompts, so changed
+contents or instructions invalidate prior completed results and interrupted traces.
+Unpublished Autofix fixer traces use the same reference check; an already indexed
+publication still resumes its frozen plan without regenerating candidates.
+Review replacements preserve markers already present in the target, but do not
+introduce markers into targets whose format adapter has already consumed them.
+
+BabelDOC adapts `protected: true` PDF annotations to the same transport. The bridge
+owns frozen mathematical glyphs; Core receives object identities, insertion points
+and optional extracted `object_source` text, used like EPUB's original markup
+references. Missing/empty references from older bridges use a generic object
+description. PDF objects retain their markers in formal targets through Review/Autofix;
+missing or damaged markers use the same bounded repair as EPUB.
+Review evidence hashes still bind the actual saved target, with object references
+supplied separately. Annotation offsets/digests bind the marker-free text. Export
+resolves markers only on a disposable chapter copy, then remaps clean offsets during
+punctuation normalization. Failed objects remain pending in state but do not block
+export: Core warns and sends explicit `omitted_protected_objects` IDs to a bridge
+advertising `protected-object-omission-v1`. The bridge retains valid siblings and
+translated prose, recording omissions without modifying frozen source objects.
+Older PDF sessions require a fresh import rather than an in-place source
+rewrite.
+
+EPUB adapts its `epub_annotations` items and existing annotation-context registry to
+these contracts. Save safely cleaned slices and digest-bound placements together.
+Pending objects are omitted with warnings during export, not moved to note-link
+fallback positions. An omitted formula can change meaning; inspect the reported
+paragraphs. Translation resume reparses missing EPUB object references under the book
+lock, validates original logical sources before writing, and commits its metadata
+version last, preserving targets, paragraph identities and completion checkpoints.
+
+Template-backed bilingual export snapshots all source subtrees before any translated
+text or attributes are backfilled. Source copies do not use target placements or
+rebuild content from model-facing `Segment.source`; they preserve the original DOM.
+Remove internal transport attributes and allocate collision-free source IDs, then
+rewrite local/cross-resource fragment references, IDREF attributes and local
+`url(#id)` references to those copies. Presentation may adapt the outer wrapper,
+but must not filter inline content by tag or language.
 
 Recent context is derived from formal targets in book order, not an independent
 persisted rolling-context string. Stop at pending text; skip intentionally blank
@@ -281,7 +381,7 @@ digest/style caches; an interrupted rebuild must not prematurely commit the new
 checkpoint. Completed targets and glossary notes remain intact.
 
 Export identity is separate and includes actual format/backend and the consistent
-source/target snapshot. Punctuation, font and ruby changes require re-export rather
+source/target snapshot. Punctuation, font and source-presentation changes require re-export rather
 than retranslation. Normalize complete logical paragraphs on an export-only copy,
 remap annotation/style offsets once, and validate the complete view before opening
 the output. Preserve pending, intentionally empty, and source-fallback identities.

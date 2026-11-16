@@ -53,6 +53,45 @@ def test_body_uses_single_user_and_restores_key_order_without_polish_transcript(
     assert translator.last_batch_turn is None
 
 
+@pytest.mark.parametrize("plain_recovery", [False, True])
+def test_hy_mt_preserves_protected_objects_in_structured_and_plain_requests(plain_recovery):
+    cfg = hy_config()
+    source = "Let be positive."
+    marker = "〘object:formula〙"
+    target = f"设{marker}为正数。"
+    responses = iter(
+        ["invalid", "invalid", target]
+        if plain_recovery
+        else [json.dumps({"p0": target}, ensure_ascii=False)]
+    )
+    client = FakeClient(handler=lambda *_: next(responses), config=cfg.llm)
+    contexts = [
+        [
+            {
+                "target_key": "formula",
+                "source": "<math>x²</math>",
+                "marker": marker,
+                "source_offset": "4",
+            }
+        ]
+    ]
+    assert Translator(client, cfg).translate_batch([source], annotation_contexts=contexts) == [
+        target
+    ]
+    for call in client.calls:
+        assert [message["role"] for message in call["messages"]] == ["user"]
+        content = call["messages"][0]["content"]
+        assert "Preserve each complete marker" in content
+        assert content.index("Protected-object markers") < content.index("[Background information")
+        if "### Source Data\n" in content:
+            assert json.loads(content.split("### Source Data\n")[1]) == {
+                "p0": f"Let {marker}be positive."
+            }
+        else:
+            assert f"Let {marker}be positive." in content
+    assert contexts[0][0]["source_offset"] == "4"
+
+
 @pytest.mark.parametrize(
     "raw",
     [
