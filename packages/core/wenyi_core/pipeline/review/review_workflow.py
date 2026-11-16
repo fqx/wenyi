@@ -61,6 +61,7 @@ class ReviewService:
             "language_policy": self._runtime.config.language_policy("review").fingerprint,
             "review_glossary_policy": "full",
             "review_glossary_reading_source": "ja",
+            "fixed_terms": dict(self._runtime.config.pipeline.glossary_fixed_terms),
             "review_output_retries": self._runtime.config.pipeline.review_output_retries,
             "review_agent_loop": self._runtime.config.pipeline.review_agent_loop,
             "inference": inference_snapshot(

@@ -317,8 +317,8 @@ def test_pre_gate_confirmations_are_not_reused_after_protocol_upgrade(operation,
 
     config = _config()
     previous = dict(operations.OPERATIONS)
-    assert previous[operation].protocol_version == 3
-    previous[operation] = replace(previous[operation], protocol_version=2)
+    assert previous[operation].protocol_version == 4
+    previous[operation] = replace(previous[operation], protocol_version=3)
     with monkeypatch.context() as context:
         context.setattr(routing, "OPERATIONS", previous)
         context.setattr(operations, "OPERATIONS", previous)

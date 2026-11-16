@@ -149,7 +149,7 @@ OPERATIONS = register_operations(
             flags=("review_agent_loop",),
             review=True,
             resumable_conversation=True,
-            protocol_version=3,
+            protocol_version=4,
         ),
         OperationSpec(
             "review.arbitrate",
@@ -178,7 +178,7 @@ OPERATIONS = register_operations(
             flags=("review_autofix",),
             review=True,
             resumable_conversation=True,
-            protocol_version=3,
+            protocol_version=4,
         ),
         OperationSpec(
             "autofix.fix",

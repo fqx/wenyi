@@ -143,6 +143,7 @@ class ReviewActionLoop:
         allowed_refs: set[str],
         validate_final: Callable[[dict[str, Any], set[str]], Any],
         final_schema: Callable[[set[str]], dict[str, Any]],
+        context_fingerprint: str | None = None,
     ) -> tuple[Any | None, str]:
         """Run up to N evidence rounds plus a final call.
 
@@ -167,9 +168,14 @@ class ReviewActionLoop:
         from ..llm.routing import inference_snapshot
 
         trace["inference"] = inference_snapshot(self.config.llm, (stage,))
+        if context_fingerprint is not None:
+            trace["context_fingerprint"] = context_fingerprint
         # Resume: load an existing trace before writing, or the trace would overwrite itself.
         existing = self.trace.load(agent_id)
-        if existing is not None and existing.get("inference") != trace["inference"]:
+        if existing is not None and (
+            existing.get("inference") != trace["inference"]
+            or existing.get("context_fingerprint") != context_fingerprint
+        ):
             self.trace.log_event(
                 "review_agent_cache_invalidated",
                 agent_id=agent_id,

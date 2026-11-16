@@ -392,6 +392,12 @@ The [structured-output transport rules](#dedicated-hy-mt-translation-models-loca
 also apply here; local evidence and replacement validation remains mandatory.
 The `openai` adapter omits the unsupported `uniqueItems` schema keyword from
 requests; replacement validation still rejects duplicate issue IDs locally.
+Verification receives matching `glossary_fixed_terms` immediately, with longer
+source phrases taking precedence over overlapping short names. Matching respects
+explicit source spelling and case. A proposed term value or correction that
+conflicts with a fixed mapping is rejected and cannot enter automatic revision.
+Changing these mappings invalidates the corresponding review session and
+verification conversation cache.
 
 <a id="limits-and-failover"></a>
 

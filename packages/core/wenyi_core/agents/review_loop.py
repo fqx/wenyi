@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
 from ..config import Config
+from ..glossary.fixed import relevant_fixed_terms
 from ..i18n.prompts import render
 from ..llm.base import LLMClient
 from ..review.contracts import EvidenceQueries, ReviewTrace
@@ -129,7 +131,40 @@ class ReviewAgentLoop:
         user += prompts.readonly_object_context(
             self.evidence.object_contexts(chapter, chunk_base, len(sources))
         )
+        fixed_terms = relevant_fixed_terms(
+            self.config.pipeline.glossary_fixed_terms, "\n".join(sources)
+        )
+        if fixed_terms:
+            user += (
+                "\n\n[Required human glossary mappings]\n"
+                + json.dumps(fixed_terms, ensure_ascii=False, indent=2)
+                + "\nThese human translations are authoritative. Use them verbatim; do not invent "
+                "synonyms or rename these entities. When correcting one of these terms, set "
+                "consistency.kind=term, subject_source to its exact listed source, and "
+                "proposed_value to its required target; explicitly include that target in the "
+                "suggestion. Check this block for violations even if preliminary candidates "
+                "missed them. These mappings override preliminary suggestions."
+            )
         allowed_refs = set(current_refs.values())
+
+        def consistency(value: Any, suggestion: str) -> dict[str, str]:
+            normalized = self._consistency(value)
+            if normalized.get("kind") == "term":
+                subject = normalized["subject_source"]
+                required = self.config.pipeline.glossary_fixed_terms.get(subject)
+                if required is None:
+                    matching = {
+                        target
+                        for spelling, target in fixed_terms.items()
+                        if spelling.casefold() == subject.casefold()
+                    }
+                    if len(matching) == 1:
+                        required = matching.pop()
+                if required is not None and (
+                    normalized["proposed_value"] != required or required not in suggestion
+                ):
+                    raise ReviewLoopProtocolError(f"fixed_term_conflict: {subject} -> {required}")
+            return normalized
 
         def issue_refs(index: int, value: Any, valid_refs: set[str]) -> list[str]:
             """Include the current segment reference with explicit citations so suggestions
@@ -199,7 +234,7 @@ class ReviewAgentLoop:
                         "suggestion": suggestion,
                         "origin": "initial",
                         "candidate_id": candidate_id,
-                        "consistency": self._consistency(decision.get("consistency")),
+                        "consistency": consistency(decision.get("consistency"), suggestion),
                         "evidence_refs": issue_refs(
                             candidate["index"],
                             decision.get("evidence_refs"),
@@ -233,7 +268,7 @@ class ReviewAgentLoop:
                         "detail": detail,
                         "suggestion": suggestion,
                         "origin": "agent",
-                        "consistency": self._consistency(issue.get("consistency")),
+                        "consistency": consistency(issue.get("consistency"), suggestion),
                         "evidence_refs": issue_refs(
                             index,
                             issue.get("evidence_refs"),
@@ -252,6 +287,17 @@ class ReviewAgentLoop:
             validate_final=validate_final,
             final_schema=lambda refs: verification_schema(
                 [candidate["candidate_id"] for candidate in candidates], len(sources), refs
+            ),
+            context_fingerprint=(
+                hashlib.sha256(
+                    json.dumps(
+                        self.config.pipeline.glossary_fixed_terms,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ).encode("utf-8")
+                ).hexdigest()
+                if self.config.pipeline.glossary_fixed_terms
+                else None
             ),
         )
         if result is None:
