@@ -57,7 +57,7 @@ ignore = ["E501"]
 # without an __init__.py, so a second package root would claim the module name
 # tests.* the core root already owns and collection would abort. See
 # packages/core/tests/test_test_layout.py.
-testpaths = ["packages/core/tests", "packages/cli/tests", "packages/backend/tests", "apps/api/tests", "apps/desktop/backend/tests"]
+testpaths = ["packages/core/tests", "packages/cli/tests", "packages/backend/tests", "apps/api/tests", "apps/desktop/backend/tests", "codex-review/tests"]
 # Both source roots stay on PYTHONPATH. The CLI entry is not only for the CLI
 # tests: several domain tests drive core behaviour through `wenyi` and import
 # `wenyi_cli` as their entry point, so removing it would break them from a

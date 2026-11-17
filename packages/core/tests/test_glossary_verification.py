@@ -60,8 +60,12 @@ def test_new_candidates_are_reviewed_before_storage_and_confirmed_terms_are_reus
         "特拉von·巴里什研究原原子物质。已确认。",
         0,
     )
-    assert store.get_term("Travon Barrish").target == "特拉文·巴里什"
-    assert store.get_term("Protomolecule").target == "原分子"
+    travon = store.get_term("Travon Barrish")
+    assert travon is not None
+    assert travon.target == "特拉文·巴里什"
+    protomolecule = store.get_term("Protomolecule")
+    assert protomolecule is not None
+    assert protomolecule.target == "原分子"
     assert summary["inserted"] == 1
     assert [c["operation"] for c in client.calls] == ["glossary.extract", "glossary.verify"]
     assert client.calls[-1]["response_schema"]["properties"]["decisions"]["maxItems"] == 1
@@ -85,7 +89,9 @@ def test_verification_checkpoint_prevents_duplicate_inference_after_admission_fa
             extractor.extract_and_store(store, "Travon arrived.", "特拉von来了。", 0)
     extractor.extract_and_store(store, "Travon arrived.", "特拉von来了。", 0)
     assert sum(c["operation"] == "glossary.verify" for c in client.calls) == 1
-    assert store.get_term("Travon").target == "特拉文"
+    travon = store.get_term("Travon")
+    assert travon is not None
+    assert travon.target == "特拉文"
     store.close()
 
 
@@ -105,7 +111,9 @@ def test_invalid_verification_does_not_admit_untrusted_candidates(tmp_path):
             store, "Travon arrived.", "特拉von来了。", 0
         )
     assert store.get_term("Travon") is None
-    assert store.get_term("Protomolecule").target == "原分子"
+    protomolecule = store.get_term("Protomolecule")
+    assert protomolecule is not None
+    assert protomolecule.target == "原分子"
     store.close()
 
 
@@ -152,11 +160,15 @@ def test_verification_is_reused_after_some_approved_candidates_were_already_admi
     with patch.object(store, "upsert_term", side_effect=interrupted_upsert):
         with pytest.raises(RuntimeError, match="interrupted second"):
             extractor.extract_and_store(store, "Travon met Mira.", "特拉von遇到了Mira。", 0)
-    assert store.get_term("Travon").target == "特拉文"
+    travon = store.get_term("Travon")
+    assert travon is not None
+    assert travon.target == "特拉文"
     assert store.get_term("Mira") is None
     extractor.extract_and_store(store, "Travon met Mira.", "特拉von遇到了Mira。", 0)
     assert sum(call["operation"] == "glossary.verify" for call in client.calls) == 1
-    assert store.get_term("Mira").target == "米拉"
+    mira = store.get_term("Mira")
+    assert mira is not None
+    assert mira.target == "米拉"
     store.close()
 
 
@@ -220,7 +232,9 @@ def test_candidate_evidence_uses_a_real_word_occurrence_after_an_earlier_substri
     store = FileStorage(str(tmp_path))
     source = "The annual ceremony began. " + "An unrelated sentence. " * 30 + "Ann arrived."
     GlossaryExtractor(client, cfg).extract_and_store(store, source, "安来了。", 0)
-    assert store.get_term("Ann").target == "安"
+    ann = store.get_term("Ann")
+    assert ann is not None
+    assert ann.target == "安"
     store.close()
 
 
@@ -241,7 +255,9 @@ def test_changed_user_mapping_invalidates_a_previous_candidate_decision(tmp_path
     store.resolve_term("Travon", "用户指定译名")
     extractor.extract_and_store(store, "Travon arrived.", "特拉von来了。", 0)
     assert sum(call["operation"] == "glossary.verify" for call in client.calls) == 2
-    assert store.get_term("Travon").target == "用户指定译名"
+    travon = store.get_term("Travon")
+    assert travon is not None
+    assert travon.target == "用户指定译名"
     store.close()
 
 

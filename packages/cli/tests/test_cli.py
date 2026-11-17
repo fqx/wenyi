@@ -7,6 +7,7 @@ import re
 import tempfile
 import unittest
 from contextlib import nullcontext
+from pathlib import Path
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -138,9 +139,11 @@ class TestCliConfig(unittest.TestCase):
                 }
 
         with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("wenyi_cli.commands.bootstrap.Path.cwd", return_value=Path(directory)),
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(app, ["translate", "input.txt"])
 
@@ -180,7 +183,7 @@ class TestCliConfig(unittest.TestCase):
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(
                 app,
@@ -238,7 +241,7 @@ class TestCliConfig(unittest.TestCase):
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(
                 app,
@@ -262,7 +265,7 @@ class TestCliConfig(unittest.TestCase):
         )
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(
                 app,
@@ -394,7 +397,7 @@ class TestCliConfig(unittest.TestCase):
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(app, ["review", "input.txt"])
 
@@ -443,7 +446,7 @@ class TestCliConfig(unittest.TestCase):
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(app, ["review", "input.txt", "--autofix"])
 
@@ -473,11 +476,12 @@ class TestCliConfig(unittest.TestCase):
     def test_assemble_skips_api_preflight(self):
         cfg = Config.from_dict({"llm": {"preset": "deepseek"}})
         with (
+            tempfile.TemporaryDirectory() as directory,
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=False),
+            patch("wenyi_cli.commands.bootstrap.load_dotenv"),
             patch.dict(os.environ, {}, clear=True),
         ):
-            result = CliRunner().invoke(app, ["assemble", "missing.epub"])
+            result = CliRunner().invoke(app, ["assemble", os.path.join(directory, "missing.epub")])
 
         self.assertEqual(result.exit_code, 1, result.output)
         self.assertIn("Input file does not exist", plain_text(result.output))
@@ -504,7 +508,7 @@ class TestCliConfig(unittest.TestCase):
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.inspection.require_input_file"),
         ):
             result = CliRunner().invoke(
                 app,
@@ -566,7 +570,7 @@ class TestCliConfig(unittest.TestCase):
                         "wenyi_core.pipeline.orchestrator.Orchestrator",
                         FakeOrchestrator,
                     ),
-                    patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+                    patch("wenyi_cli.commands.workflows.require_input_file"),
                 ):
                     result = CliRunner().invoke(app, ["translate", "input.pdf"])
 
@@ -577,7 +581,7 @@ class TestCliConfig(unittest.TestCase):
     def test_translate_rejects_unknown_output_format_after_api_preflight(self):
         cfg = Config.from_dict({"llm": {"preset": "fake"}})
         with (
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
         ):
             result = CliRunner().invoke(app, ["translate", "input.txt", "--format", "xml"])
@@ -599,7 +603,7 @@ class TestCliConfig(unittest.TestCase):
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(app, ["translate", "input.txt", "--chapter", "9"])
 
@@ -638,7 +642,6 @@ class TestCliConfig(unittest.TestCase):
         for args in commands:
             with self.subTest(args=args):
                 with (
-                    patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
                     patch(
                         "wenyi_cli.commands.validation.runstore_for",
                         side_effect=ValueError("Input content does not match existing state"),
