@@ -1,0 +1,22 @@
+{
+  "models": {
+    "scan": "gpt-6-luna",
+    "verify": "gpt-6.1-terra",
+    "triage": "gpt-6.1-sol",
+    "expanded": "gpt-6.1-sol",
+    "fix": "gpt-6.1-terra",
+    "accept": "gpt-6.1-sol",
+    "adjudicate": "gpt-6.1-sol"
+  },
+  "runtime": {
+    "codex": "codex",
+    "max_workers": 6,
+    "role_limits": {
+      "scan": 2,
+      "repair": 2,
+      "judge": 4
+    },
+    "timeout_seconds": 600,
+    "poll_seconds": 0.2
+  }
+}

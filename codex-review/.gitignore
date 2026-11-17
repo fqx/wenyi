@@ -1,0 +1,15 @@
+# Local review state and generated exports
+runs/
+artifacts/
+local/
+
+# Local configuration and credentials
+.env
+.env.*
+*.local.json
+config.json
+
+# Python test and bytecode output
+__pycache__/
+.pytest_cache/
+*.py[cod]

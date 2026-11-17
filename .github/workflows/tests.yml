@@ -42,6 +42,7 @@ jobs:
               - "apps/api/**"
               - "apps/desktop/backend/**"
               - "scripts/**"
+              - "codex-review/**"
               # The lock crate is a runtime dependency of the Python suite: the
               # contract test loads it, so a crate change must run the suite.
               - "native/**"
@@ -199,8 +200,8 @@ jobs:
         run: uv run --no-sync python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
       - name: Python style
         run: |
-          uv run --no-sync ruff check packages/core packages/cli packages/backend apps/api apps/desktop/backend scripts
-          uv run --no-sync ruff format --check packages/core packages/cli packages/backend apps/api apps/desktop/backend scripts
+          uv run --no-sync ruff check packages/core packages/cli packages/backend apps/api apps/desktop/backend scripts codex-review
+          uv run --no-sync ruff format --check packages/core packages/cli packages/backend apps/api apps/desktop/backend scripts codex-review
           git diff --check
       - name: Offline Python regression tests
         # loadgroup keeps tests that share a group on one worker; -n auto sizes
