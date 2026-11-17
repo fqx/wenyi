@@ -538,7 +538,7 @@ class TestCliBilingualFlags(unittest.TestCase):
         with (
             patch("wenyi_cli.commands.context.CommandContext.load_config", return_value=cfg),
             patch("wenyi_core.pipeline.orchestrator.Orchestrator", FakeOrchestrator),
-            patch("wenyi_cli.commands.validation.os.path.isfile", return_value=True),
+            patch("wenyi_cli.commands.workflows.require_input_file"),
         ):
             result = CliRunner().invoke(app, ["translate", "input.txt", "--no-mono", "--bilingual"])
 
