@@ -76,7 +76,11 @@ def _prompt(task: Any) -> str:
         "Return only JSON matching the output schema. Include each requested segment ID "
         "exactly once, never context IDs. Copy evidence literally from the specified source; "
         "do not paraphrase, change case, or change punctuation in quotes. "
-        "Use the target language for explanatory judgments.\n"
+        "For ordinary issue reports, source_quote must be an exact substring of that "
+        "segment.source, never from proposed, target, context, or prior feedback. "
+        "For adjudication evidence, quote the source identified by source_id. "
+        "Keep evidence quotes in the source language; use the target language only for "
+        "explanations and replacement translations.\n"
         + json.dumps(task.payload, ensure_ascii=False)
     )
 
@@ -272,11 +276,15 @@ def _run_locked(
                 pause = "Blocked tasks require explicit recovery."
             if not stopping and not pause:
                 excluded = set(active)
-                for _ in range(config.max_workers * 2):
-                    if stopping or pause or len(active) >= config.max_workers:
-                        break
+                while not stopping and not pause and len(active) < config.max_workers:
                     ready = controller.next_tasks(
-                        config.max_workers - len(active), exclude_ids=excluded
+                        config.max_workers - len(active),
+                        exclude_ids=excluded,
+                        exclude_roles={
+                            role
+                            for role, limit in config.role_limits.items()
+                            if sum(job.task.role == role for job in active.values()) >= limit
+                        },
                     )
                     if not ready:
                         break

@@ -57,6 +57,17 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "frozen at init"):
             main(["run", "--run-dir", str(self.run), "--config", str(configuration)])
 
+    def test_saturated_role_skips_existing_and_new_tasks(self):
+        c = self.create(mode="full")
+        scan = c.next_tasks()[0]
+        c.submit(scan.id, self.response(scan), "scan")
+        assert c.next_tasks(exclude_roles={"repair"}) == []
+        assert len(c.state["tasks"]) == 1
+        verify = c.next_tasks()[0]
+        assert verify.stage == "verify"
+        assert c.next_tasks(exclude_roles={"repair"}) == []
+        assert c.next_tasks()[0].id == verify.id
+
     @staticmethod
     def response(task, status="clear", issue_id=None):
         return {
