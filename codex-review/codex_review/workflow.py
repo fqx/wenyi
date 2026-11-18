@@ -324,7 +324,10 @@ class Controller:
         }
 
     def next_tasks(
-        self, limit: int = 1, exclude_ids: tuple[str, ...] | set[str] = ()
+        self,
+        limit: int = 1,
+        exclude_ids: tuple[str, ...] | set[str] = (),
+        exclude_roles: tuple[str, ...] | set[str] = (),
     ) -> list[Task]:
         self._ensure_frozen()
         if limit < 1:
@@ -345,7 +348,9 @@ class Controller:
         ready = [
             task
             for task in self.state["tasks"].values()
-            if task["status"] == "ready" and task["task"]["id"] not in excluded
+            if task["status"] == "ready"
+            and task["task"]["id"] not in excluded
+            and task["task"]["role"] not in exclude_roles
         ]
         occupied = {
             sid
@@ -357,6 +362,15 @@ class Controller:
         for stage in priority:
             if len(ready) >= limit:
                 break
+            role = (
+                "scan"
+                if stage == "scan"
+                else "repair"
+                if stage == "fix" or (stage == "verify" and self.manifest["mode"] == "full")
+                else "judge"
+            )
+            if role in exclude_roles:
+                continue
             candidates = [
                 sid
                 for sid in self.order
@@ -396,11 +410,7 @@ class Controller:
                     "batch:" + str(batch)
                     if stage == "fix" or (stage == "verify" and self.manifest["mode"] == "full")
                     else None,
-                    "scan"
-                    if stage == "scan"
-                    else "repair"
-                    if stage == "fix" or (stage == "verify" and self.manifest["mode"] == "full")
-                    else "judge",
+                    role,
                 )
                 record = {
                     "task": asdict(task),

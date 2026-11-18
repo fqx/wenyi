@@ -9,9 +9,17 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from codex_review.runtime import RuntimeConfig, run
+from codex_review.runtime import RuntimeConfig, _prompt, run
 from codex_review.storage import atomic_json, exclusive_lock, load_json
 from codex_review.workflow import ResponseError
+
+
+def test_prompt_keeps_source_quotes_in_source_language():
+    prompt = _prompt(task("quote-contract"))
+    assert "source_quote" in prompt
+    assert "segment.source" in prompt
+    assert "never from proposed" in prompt
+    assert "Keep evidence quotes in the source language" in prompt
 
 
 @pytest.fixture
@@ -57,6 +65,7 @@ class FakeController:
         self.done: set[str] = set()
         self.failures: dict[str, list[str]] = {}
         self.failure_limit = failure_limit
+        self.excluded_roles: set[str] = set()
 
     def reload(self) -> None:
         pass
@@ -65,11 +74,15 @@ class FakeController:
         blocked = [key for key, value in self.failures.items() if len(value) >= self.failure_limit]
         return {"complete": len(self.done) == len(self.tasks), "blocked": blocked}
 
-    def next_tasks(self, limit: int, exclude_ids: set[str]) -> list[SimpleNamespace]:
+    def next_tasks(
+        self, limit: int, exclude_ids: set[str], exclude_roles: tuple[str, ...] | set[str] = ()
+    ) -> list[SimpleNamespace]:
+        self.excluded_roles.update(exclude_roles)
         return [
             item
             for item in self.tasks
             if item.id not in self.done | exclude_ids
+            and item.role not in exclude_roles
             and all(parent in self.done for parent in item.dependencies)
         ][:limit]
 
@@ -144,6 +157,23 @@ def test_persistent_repair_and_fresh_acceptance(tmp_path: Path, executable: Path
     assert "--ephemeral" not in arguments["first"]
     assert arguments["second"][:2] == ["exec", "resume"]
     assert "--ephemeral" in arguments["judge"] and "resume" not in arguments["judge"]
+
+
+def test_scan_dispatches_past_saturated_repair_queue(tmp_path: Path, executable: Path):
+    items = [task("slow-repair", "repair", payload={"delay": 0.8})]
+    items.extend(task(f"queued-{index}", "repair") for index in range(12))
+    items.append(task("scan", "scan"))
+    controller = FakeController(tmp_path / "run", items)
+    result = run(
+        controller,
+        config(executable, max_workers=2, role_limits={"scan": 1, "repair": 1, "judge": 1}),
+    )
+    assert result["status"]["complete"]
+    attempts = controller.run_dir / "attempts"
+    scan = load_json(attempts / "scan" / "attempt-0001" / "worker.json")
+    repair = load_json(attempts / "slow-repair" / "attempt-0001" / "worker.json")
+    assert scan["start"] < repair["end"]
+    assert "repair" in controller.excluded_roles
 
 
 def test_format_retry_and_block_drains_workers(tmp_path: Path, executable: Path):
